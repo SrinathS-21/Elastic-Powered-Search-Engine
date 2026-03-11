@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pepagora — B2B Search</title>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(160deg, #fff5f5 0%, #fff 60%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ── Nav ──────────────────────────────────────────────────────────────── */
+    nav {
+      width: 100%;
+      padding: 14px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #f0e0e0;
+      background: #fff;
+    }
+
+    .nav-logo {
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: #c0392b;
+      letter-spacing: -0.5px;
+    }
+    .nav-logo span { color: #333; }
+
+    .nav-right {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      font-size: 0.85rem;
+      color: #555;
+    }
+
+    .btn {
+      padding: 7px 18px;
+      border-radius: 20px;
+      border: 1.5px solid #c0392b;
+      background: transparent;
+      color: #c0392b;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+    .btn:hover { background: #fdecea; }
+    .btn.primary { background: #c0392b; color: #fff; }
+    .btn.primary:hover { background: #a93226; }
+
+    /* ── Hero ─────────────────────────────────────────────────────────────── */
+    .hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 80px 16px 40px;
+      width: 100%;
+      max-width: 760px;
+    }
+
+    .logo-block {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 40px;
+    }
+
+    .logo-text {
+      font-size: 2.8rem;
+      font-weight: 900;
+      color: #c0392b;
+      letter-spacing: -1px;
+      line-height: 1;
+    }
+
+    .logo-tagline-sep {
+      width: 1.5px;
+      height: 48px;
+      background: #ccc;
+    }
+
+    .logo-tagline {
+      font-size: 1.15rem;
+      color: #555;
+      font-weight: 400;
+      line-height: 1.3;
+    }
+
+    /* ── Search wrapper ───────────────────────────────────────────────────── */
+    .search-wrapper {
+      position: relative;
+      width: 100%;
+    }
+
+    .search-box {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      border: 1.5px solid #c0392b;
+      border-radius: 30px;
+      background: #fff;
+      padding: 0 18px;
+      box-shadow: 0 2px 12px rgba(192, 57, 43, 0.10);
+      transition: box-shadow 0.15s;
+    }
+    .search-box:focus-within {
+      box-shadow: 0 4px 20px rgba(192, 57, 43, 0.18);
+    }
+
+    #search-input {
+      flex: 1;
+      border: none;
+      outline: none;
+      font-size: 1rem;
+      padding: 14px 10px;
+      background: transparent;
+      color: #222;
+    }
+
+    .clear-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #aaa;
+      font-size: 1.1rem;
+      padding: 4px 6px;
+      display: none;
+      line-height: 1;
+    }
+    .clear-btn:hover { color: #c0392b; }
+
+    /* ── Dropdown ─────────────────────────────────────────────────────────── */
+    .dropdown {
+      display: none;
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      background: #fff;
+      border: 1px solid #e8e0e0;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+      z-index: 100;
+      overflow: hidden;
+    }
+    .dropdown.open { display: block; }
+
+    /* ── Dropdown header ──────────────────────────────────────────────────── */
+    .dd-header {
+      padding: 10px 18px 6px;
+      font-size: 0.78rem;
+      color: #999;
+      border-bottom: 1px solid #f5f0f0;
+    }
+    .dd-header strong { color: #555; }
+
+    /* ── Refine by section ────────────────────────────────────────────────── */
+    .refine-section {
+      padding: 4px 0 2px;
+      border-top: 1px solid #f5f0f0;
+    }
+    .refine-label {
+      padding: 8px 18px 4px;
+      font-size: 0.73rem;
+      font-weight: 700;
+      color: #bbb;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+
+    /* ── Category rows ────────────────────────────────────────────────────── */
+    .category-section {
+      padding: 6px 0 4px;
+      border-bottom: 1px solid #f5f0f0;
+    }
+
+    .category-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 18px;
+      cursor: pointer;
+      transition: background 0.1s;
+      text-decoration: none;
+      color: inherit;
+    }
+    .category-row:hover { background: #fdf5f5; }
+
+    .cat-icon {
+      width: 28px;
+      height: 28px;
+      background: #fdecea;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .cat-icon svg { width: 14px; height: 14px; fill: #c0392b; }
+
+    .cat-label {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    .cat-name {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #222;
+    }
+    .cat-type {
+      font-size: 0.72rem;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    /* ── Product rows ─────────────────────────────────────────────────────── */
+    .product-section { padding: 4px 0; }
+
+    .product-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 18px;
+      cursor: pointer;
+      transition: background 0.1s;
+      text-decoration: none;
+      color: inherit;
+    }
+    .product-row:hover { background: #fdf5f5; }
+
+    .search-icon {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: #ccc;
+    }
+    .search-icon svg { width: 15px; height: 15px; fill: #bbb; }
+
+    .product-name {
+      font-size: 0.9rem;
+      color: #333;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ── Footer ───────────────────────────────────────────────────────────── */
+    .dd-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 18px;
+      border-top: 1px solid #f5f0f0;
+      background: #fdf9f9;
+    }
+    .dd-total {
+      font-size: 0.82rem;
+      color: #888;
+    }
+    .dd-total strong { color: #333; }
+    .see-more-btn {
+      font-size: 0.82rem;
+      color: #c0392b;
+      font-weight: 600;
+      background: none;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0;
+    }
+    .see-more-btn:hover { text-decoration: underline; }
+
+    /* ── Loading spinner ──────────────────────────────────────────────────── */
+    .dd-loading {
+      padding: 20px;
+      text-align: center;
+      color: #aaa;
+      font-size: 0.85rem;
+    }
+
+    /* ── Empty state ──────────────────────────────────────────────────────── */
+    .dd-empty {
+      padding: 20px;
+      text-align: center;
+      color: #bbb;
+      font-size: 0.88rem;
+    }
+
+    /* ── Latency / metrics badge ─────────────────────────────────────────── */
+    .metrics-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 18px;
+      background: #f8f9fa;
+      border-bottom: 1px solid #f0eded;
+      font-size: 0.75rem;
+      color: #888;
+    }
+    .metric-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 0.72rem;
+    }
+    .metric-chip.latency  { background: #e8f5e9; color: #2e7d32; }
+    .metric-chip.latency.slow  { background: #fff3e0; color: #e65100; }
+    .metric-chip.latency.very-slow { background: #fce4ec; color: #c62828; }
+    .metric-chip.total    { background: #e3f2fd; color: #1565c0; }
+
+    .metric-chip svg { width: 12px; height: 12px; flex-shrink: 0; }
+
+    /* ── Confidence badge (dropdown products) ────────────────────────────── */
+    .conf-badge {
+      margin-left: auto;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 10px;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .conf-high   { background: #e8f5e9; color: #2e7d32; }
+    .conf-medium { background: #fff8e1; color: #f57f17; }
+    .conf-low    { background: #fce4ec; color: #c62828; }
+
+    /* ── Confidence bar (search results) ─────────────────────────────────── */
+    .result-meta {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #f5f0f0;
+      font-size: 0.75rem;
+      color: #999;
+    }
+    .conf-meter {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 1;
+      max-width: 220px;
+    }
+    .conf-meter-label {
+      font-size: 0.72rem;
+      color: #888;
+      white-space: nowrap;
+    }
+    .conf-meter-track {
+      flex: 1;
+      height: 6px;
+      background: #f0eded;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .conf-meter-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.4s ease;
+    }
+    .conf-meter-fill.high   { background: linear-gradient(90deg, #66bb6a, #43a047); }
+    .conf-meter-fill.medium { background: linear-gradient(90deg, #ffca28, #f9a825); }
+    .conf-meter-fill.low    { background: linear-gradient(90deg, #ef9a9a, #e53935); }
+    .conf-meter-value {
+      font-size: 0.72rem;
+      font-weight: 700;
+      min-width: 36px;
+      text-align: right;
+    }
+    .conf-meter-value.high   { color: #2e7d32; }
+    .conf-meter-value.medium { color: #f57f17; }
+    .conf-meter-value.low    { color: #c62828; }
+
+    .score-label {
+      font-size: 0.72rem;
+      color: #bbb;
+    }
+
+    /* ── Results page latency strip ──────────────────────────────────────── */
+    .results-metrics {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      font-size: 0.78rem;
+      color: #999;
+    }
+
+    /* ── Full search results page ─────────────────────────────────────────── */
+    .results-page {
+      display: none;
+      width: 100%;
+      max-width: 900px;
+      padding: 24px 16px;
+    }
+
+    .results-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .results-title { font-size: 0.95rem; color: #888; }
+    .results-title strong { color: #222; }
+
+    .result-card {
+      background: #fff;
+      border: 1px solid #eee;
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: box-shadow 0.15s, border-color 0.15s;
+    }
+    .result-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); border-color: #f0b9b9; }
+    .result-name { font-size: 1rem; font-weight: 600; color: #222; margin-bottom: 5px; }
+    .result-desc { font-size: 0.85rem; color: #666; margin-bottom: 8px; line-height: 1.5; }
+    .result-cats { display: flex; gap: 6px; flex-wrap: wrap; }
+    .cat-tag {
+      font-size: 0.72rem;
+      background: #fdecea;
+      color: #c0392b;
+      padding: 2px 9px;
+      border-radius: 20px;
+      font-weight: 500;
+    }
+
+    .pagination {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 24px;
+    }
+    .page-btn {
+      padding: 7px 14px;
+      border-radius: 8px;
+      border: 1.5px solid #ddd;
+      background: #fff;
+      cursor: pointer;
+      font-size: 0.85rem;
+      color: #555;
+      transition: all 0.1s;
+    }
+    .page-btn:hover { border-color: #c0392b; color: #c0392b; }
+    .page-btn.active { background: #c0392b; border-color: #c0392b; color: #fff; }
+    .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Scroll down hint ─────────────────────────────────────────────────── */
+    .scroll-hint {
+      margin-top: 48px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      color: #ccc;
+      font-size: 0.78rem;
+    }
+    .scroll-hint svg { width: 20px; height: 20px; fill: #ddd; animation: bounce 2s infinite; }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50%       { transform: translateY(5px); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Nav ──────────────────────────────────────────────────────────────────── -->
+<nav>
+  <span class="nav-logo">pepag<span>o</span>ra</span>
+  <div class="nav-right">
+    <span>English</span>
+    <span>|</span>
+    <span>IN</span>
+    <button class="btn" onclick="alert('Feature coming soon')">Post Buying Requirement</button>
+    <button class="btn">Login</button>
+    <button class="btn primary">Get Started</button>
+  </div>
+</nav>
+
+<!-- ── Hero ─────────────────────────────────────────────────────────────────── -->
+<div class="hero" id="hero-section">
+  <div class="logo-block">
+    <div class="logo-text">pepag<span style="color:#e74c3c">o</span>ra</div>
+    <div class="logo-tagline-sep"></div>
+    <div class="logo-tagline">The B2B Growth Engine</div>
+  </div>
+
+  <!-- Search -->
+  <div class="search-wrapper">
+    <div class="search-box">
+      <!-- Magnifier icon -->
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c0392b" stroke-width="2.2"
+           stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+
+      <input
+        id="search-input"
+        type="text"
+        placeholder="Search products, categories, suppliers..."
+        autocomplete="off"
+        spellcheck="false"
+      />
+
+      <button class="clear-btn" id="clear-btn" onclick="clearSearch()" title="Clear">&#x2715;</button>
+    </div>
+
+    <!-- Dropdown -->
+    <div class="dropdown" id="dropdown">
+      <div id="dd-content">
+        <div class="dd-loading">Start typing to search…</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="scroll-hint" id="scroll-hint">
+    <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+    Scroll down
+  </div>
+</div>
+
+<!-- ── Full search results ───────────────────────────────────────────────────── -->
+<div class="results-page" id="results-page">
+  <div class="results-header">
+    <div class="results-title" id="results-title"></div>
+    <button class="btn" onclick="backToHome()">← New Search</button>
+  </div>
+  <div id="results-list"></div>
+  <div class="pagination" id="pagination"></div>
+</div>
+
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+// If served via FastAPI (port 8000) use same origin; otherwise point to API explicitly.
+const API_BASE    = window.location.port === "8000"
+  ? window.location.origin
+  : "http://localhost:8000";
+const DEBOUNCE_MS = 220;
+const MIN_CHARS   = 2;
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let debounceTimer    = null;
+let currentQuery     = "";
+let currentCategory  = "";
+let currentPage      = 1;
+
+// ── DOM refs ──────────────────────────────────────────────────────────────────
+const searchInput  = document.getElementById("search-input");
+const dropdown     = document.getElementById("dropdown");
+const ddContent    = document.getElementById("dd-content");
+const clearBtn     = document.getElementById("clear-btn");
+const heroSection  = document.getElementById("hero-section");
+const resultsPage  = document.getElementById("results-page");
+const resultsList  = document.getElementById("results-list");
+const paginationEl = document.getElementById("pagination");
+const scrollHint   = document.getElementById("scroll-hint");
+
+// ── Event listeners ───────────────────────────────────────────────────────────
+searchInput.addEventListener("input", onInput);
+searchInput.addEventListener("focus", () => {
+  if (searchInput.value.trim().length >= MIN_CHARS) openDropdown();
+});
+searchInput.addEventListener("keydown", onKeyDown);
+
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".search-wrapper")) closeDropdown();
+});
+
+// ── Input handler ─────────────────────────────────────────────────────────────
+function onInput() {
+  const q = searchInput.value.trim();
+  clearBtn.style.display = q.length > 0 ? "block" : "none";
+
+  if (q.length < MIN_CHARS) {
+    closeDropdown();
+    return;
+  }
+
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => fetchAutocomplete(q), DEBOUNCE_MS);
+}
+
+// ── Keyboard navigation ───────────────────────────────────────────────────────
+let focusIndex = -1;
+function onKeyDown(e) {
+  const rows = dropdown.querySelectorAll(".category-row, .product-row");
+
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    focusIndex = Math.min(focusIndex + 1, rows.length - 1);
+    rows[focusIndex]?.focus();
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    focusIndex = Math.max(focusIndex - 1, -1);
+    if (focusIndex === -1) searchInput.focus();
+    else rows[focusIndex]?.focus();
+  } else if (e.key === "Escape") {
+    closeDropdown();
+    searchInput.blur();
+  } else if (e.key === "Enter") {
+    const q = searchInput.value.trim();
+    if (q.length >= MIN_CHARS) goToSearch(q, 1);
+  }
+}
+
+// ── Fetch autocomplete ────────────────────────────────────────────────────────
+async function fetchAutocomplete(q) {
+  if (q === currentQuery) return;
+  currentQuery = q;
+
+  showLoading();
+  openDropdown();
+
+  try {
+    const res  = await fetch(`${API_BASE}/autocomplete?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    if (data.query !== searchInput.value.trim()) return; // stale response
+    renderDropdown(data);
+  } catch (err) {
+    ddContent.innerHTML = `<div class="dd-empty">Could not reach search service.</div>`;
+  }
+}
+
+// ── Render dropdown ───────────────────────────────────────────────────────────
+function renderDropdown(data) {
+  focusIndex = -1;
+  const { query, categories, sub_categories, product_categories, products, total, latency_ms } = data;
+
+  const hasCategories = categories.length + sub_categories.length + product_categories.length > 0;
+  const hasProducts   = products.length > 0;
+
+  if (!hasCategories && !hasProducts) {
+    ddContent.innerHTML = `<div class="dd-empty">No results for "<strong>${escHtml(query)}</strong>"</div>`;
+    return;
+  }
+
+  // ── Metrics bar: latency + total ──────────────────────────────────────────
+  const latClass = latency_ms < 100 ? 'latency' : latency_ms < 300 ? 'latency slow' : 'latency very-slow';
+  let html = `
+    <div class="metrics-bar">
+      <span class="metric-chip ${latClass}">
+        ${clockIcon()} ${latency_ms} ms
+      </span>
+      <span class="metric-chip total">
+        ${resultsIcon()} ${total.toLocaleString()} matches
+      </span>
+    </div>
+    <div class="dd-header">
+      Showing results for: <strong>${escHtml(query)}</strong>
+    </div>`;
+
+  // ── 1. Product name matches (PRIMARY — shown first) ───────────────────────
+  if (hasProducts) {
+    html += `<div class="product-section">`;
+    for (const p of products) {
+      const confLevel = confidenceLevel(p.confidence);
+      html += `
+        <div class="product-row" tabindex="0"
+             onclick="goToSearch('${escAttr(query)}', 1, '')"
+             onkeydown="if(event.key==='Enter')goToSearch('${escAttr(query)}',1,'')"
+             title="${escAttr(p.name)} — Confidence: ${p.confidence}%">
+          <div class="search-icon">${searchIcon()}</div>
+          <span class="product-name">${escHtml(p.name)}</span>
+          <span class="conf-badge conf-${confLevel}">${p.confidence}%</span>
+        </div>`;
+    }
+    html += `</div>`;
+  }
+
+  // ── 2. Category matches (SECONDARY — refine filters) ─────────────────────
+  if (hasCategories) {
+    html += `<div class="refine-section">`;
+    html += `<div class="refine-label">Refine by</div>`;
+
+    const catRows = [
+      { items: categories,         label: "Category" },
+      { items: sub_categories,     label: "Sub-Category" },
+      { items: product_categories, label: "Product Category" },
+    ];
+
+    for (const { items, label } of catRows) {
+      for (const name of items) {
+        html += `
+          <div class="category-row" tabindex="0"
+               onclick="goToSearch('${escAttr(query)}', 1, '${escAttr(name)}')"
+               onkeydown="if(event.key==='Enter')goToSearch('${escAttr(query)}',1,'${escAttr(name)}')">
+            <div class="cat-icon">
+              ${folderIcon()}
+            </div>
+            <div class="cat-label">
+              <span class="cat-name">${escHtml(name)}</span>
+              <span class="cat-type">${escHtml(label)}</span>
+            </div>
+          </div>`;
+      }
+    }
+
+    html += `</div>`;
+  }
+
+  // ── Footer: total + see more ──────────────────────────────────────────────
+  html += `
+    <div class="dd-footer">
+      <span class="dd-total">Matching results <strong>(${total.toLocaleString()})</strong></span>
+      <button class="see-more-btn" onclick="goToSearch('${escAttr(query)}', 1, '')">
+        See more
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="5" y1="12" x2="19" y2="12"/>
+          <polyline points="12 5 19 12 12 19"/>
+        </svg>
+      </button>
+    </div>`;
+
+  ddContent.innerHTML = html;
+}
+
+// ── Full search results ───────────────────────────────────────────────────────
+async function goToSearch(q, page, category = "") {
+  closeDropdown();
+  searchInput.value = q;
+  clearBtn.style.display = "block";
+  currentQuery    = q;
+  currentCategory = category;
+  currentPage     = page;
+
+  heroSection.style.paddingBottom = "20px";
+  scrollHint.style.display = "none";
+  resultsPage.style.display = "block";
+
+  resultsList.innerHTML  = `<div class="dd-loading">Searching…</div>`;
+  paginationEl.innerHTML = "";
+
+  try {
+    let url = `${API_BASE}/search?q=${encodeURIComponent(q)}&page=${page}`;
+    if (category) url += `&category=${encodeURIComponent(category)}`;
+    const res  = await fetch(url);
+    const data = await res.json();
+    renderResults(data, category);
+  } catch {
+    resultsList.innerHTML = `<div class="dd-empty">Search service unavailable.</div>`;
+  }
+}
+
+function renderResults(data, activeCategory = "") {
+  const { query, total, page, pages, hits, latency_ms } = data;
+
+  // Title: show active category filter chip if any
+  const filterNote = activeCategory
+    ? ` in <span class="cat-tag" style="font-size:0.82rem">${escHtml(activeCategory)
+      }<button onclick="goToSearch('${escAttr(query)}',1,'')" style="background:none;border:none;cursor:pointer;color:#c0392b;font-weight:700;margin-left:3px" title="Remove filter">&times;</button></span>`
+    : "";
+  document.getElementById("results-title").innerHTML =
+    `<strong>${total.toLocaleString()}</strong> results for "<strong>${escHtml(query)}</strong>"${filterNote}`;
+
+  if (hits.length === 0) {
+    resultsList.innerHTML = `<div class="dd-empty">No products found.</div>`;
+    return;
+  }
+
+  // Metrics strip
+  const latClass = latency_ms < 100 ? 'latency' : latency_ms < 300 ? 'latency slow' : 'latency very-slow';
+  let metricsHtml = `
+    <div class="results-metrics">
+      <span class="metric-chip ${latClass}">${clockIcon()} ${latency_ms} ms</span>
+      <span class="metric-chip total">${resultsIcon()} ${total.toLocaleString()} matches</span>
+      <span style="margin-left:auto;font-size:0.72rem;color:#bbb">Page ${page} of ${pages}</span>
+    </div>`;
+
+  resultsList.innerHTML = metricsHtml + hits.map(h => {
+    const confLevel = confidenceLevel(h.confidence);
+    return `
+    <div class="result-card">
+      <div class="result-name">${escHtml(h.productName)}</div>
+      ${h.productDescription
+        ? `<div class="result-desc">${escHtml(h.productDescription)}</div>`
+        : ""}
+      <div class="result-cats">
+        ${h.category_name        ? `<span class="cat-tag" style="cursor:pointer" onclick="goToSearch('${escAttr(query)}',1,'${escAttr(h.category_name)}')" title="Filter by this category">${escHtml(h.category_name)}</span>` : ""}
+        ${h.subCategory_name     ? `<span class="cat-tag" style="cursor:pointer" onclick="goToSearch('${escAttr(query)}',1,'${escAttr(h.subCategory_name)}')" title="Filter by this sub-category">${escHtml(h.subCategory_name)}</span>` : ""}
+        ${h.productCategory_name ? `<span class="cat-tag" style="cursor:pointer" onclick="goToSearch('${escAttr(query)}',1,'${escAttr(h.productCategory_name)}')" title="Filter by this product category">${escHtml(h.productCategory_name)}</span>` : ""}
+      </div>
+      <div class="result-meta">
+        <div class="conf-meter">
+          <span class="conf-meter-label">Confidence</span>
+          <div class="conf-meter-track">
+            <div class="conf-meter-fill ${confLevel}" style="width:${h.confidence}%"></div>
+          </div>
+          <span class="conf-meter-value ${confLevel}">${h.confidence}%</span>
+        </div>
+        <span class="score-label">Score: ${h.score}</span>
+      </div>
+    </div>`;
+  }).join("");
+
+  // Pagination — pass active category through page turns
+  const cat = activeCategory;
+  let pagHtml = "";
+  pagHtml += `<button class="page-btn" onclick="goToSearch('${escAttr(query)}',${page-1},'${escAttr(cat)}')" ${page===1?"disabled":""}>← Prev</button>`;
+
+  const start = Math.max(1, page - 2);
+  const end   = Math.min(pages, page + 2);
+  for (let i = start; i <= end; i++) {
+    pagHtml += `<button class="page-btn ${i===page?"active":""}" onclick="goToSearch('${escAttr(query)}',${i},'${escAttr(cat)}')">${i}</button>`;
+  }
+
+  pagHtml += `<button class="page-btn" onclick="goToSearch('${escAttr(query)}',${page+1},'${escAttr(cat)}')" ${page===pages?"disabled":""}>Next →</button>`;
+  paginationEl.innerHTML = pagHtml;
+
+  resultsPage.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
+function backToHome() {
+  resultsPage.style.display = "none";
+  scrollHint.style.display  = "flex";
+  heroSection.style.paddingBottom = "";
+  searchInput.value = "";
+  clearBtn.style.display = "none";
+  currentQuery = "";
+  searchInput.focus();
+}
+
+function clearSearch() {
+  searchInput.value = "";
+  clearBtn.style.display = "none";
+  closeDropdown();
+  searchInput.focus();
+  currentQuery = "";
+}
+
+function openDropdown()  { dropdown.classList.add("open"); }
+function closeDropdown() { dropdown.classList.remove("open"); }
+
+function showLoading() {
+  ddContent.innerHTML = `<div class="dd-loading">Searching…</div>`;
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function escAttr(s) {
+  return String(s).replace(/'/g, "\\'").replace(/"/g, "&quot;");
+}
+
+function folderIcon() {
+  return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+  </svg>`;
+}
+
+function searchIcon() {
+  return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="11" cy="11" r="8" stroke="#bbb" stroke-width="2" fill="none"/>
+    <line x1="21" y1="21" x2="16.65" y2="16.65" stroke="#bbb" stroke-width="2"/>
+  </svg>`;
+}
+
+function clockIcon() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+  </svg>`;
+}
+
+function resultsIcon() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+    <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+  </svg>`;
+}
+
+function confidenceLevel(conf) {
+  if (conf >= 70) return 'high';
+  if (conf >= 40) return 'medium';
+  return 'low';
+}
+</script>
+</body>
+</html>
