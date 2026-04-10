@@ -1,0 +1,28 @@
+{
+    "synonyms": {
+        "ac": "air conditioner",
+        "ss": "stainless steel",
+        "ms": "mild steel",
+        "gi": "galvanized iron",
+        "ci": "cast iron",
+        "pvc": "polyvinyl chloride",
+        "cpvc": "chlorinated polyvinyl chloride",
+        "upvc": "unplasticized polyvinyl chloride",
+        "hdpe": "high density polyethylene",
+        "ldpe": "low density polyethylene",
+        "pp": "polypropylene",
+        "pe": "polyethylene",
+        "frp": "fiber reinforced plastic",
+        "ro": "reverse osmosis",
+        "uv": "ultraviolet",
+        "ups": "uninterruptible power supply",
+        "lcd": "liquid crystal display",
+        "cfl": "compact fluorescent lamp",
+        "hvac": "heating ventilation air conditioning",
+        "cnc": "computer numerical control",
+        "erw": "electric resistance welded",
+        "hrc": "hot rolled coil",
+        "od": "outer diameter",
+        "id": "inner diameter"
+    }
+}
