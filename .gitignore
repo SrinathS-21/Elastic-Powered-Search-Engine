@@ -12,6 +12,9 @@ __pycache__/
 venv/
 env/
 .env/
+.env
+.env.*
+!.env.example
 
 # OS
 .DS_Store
@@ -23,3 +26,4 @@ Thumbs.db
 
 # Logs
 *.log
+logs/mapping_telemetry*.jsonl

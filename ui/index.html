@@ -118,6 +118,10 @@
       z-index: 90;
     }
 
+    .search-form {
+      margin: 0;
+    }
+
     .input-label {
       display: block;
       margin-bottom: 8px;
@@ -526,15 +530,19 @@
 
     <section id="searchPanel" class="panel panel-search">
       <h2 class="section-title">1) Search Keyword</h2>
-      <div class="search-row">
-        <label class="input-label" for="keywordInput">Keyword Search Bar</label>
-        <input id="keywordInput" class="search-input" type="text" autocomplete="off"
-          placeholder="Start typing keyword (e.g., sports watch, stainless steel pipes)" />
-        <div id="dropdown" class="dropdown" role="listbox" aria-label="Autocomplete suggestions"></div>
-      </div>
-      <div class="hint">Suggestions update live. Click a listed keyword to fetch mapping immediately, or press Enter to
-        use typed text.
-      </div>
+      <form id="keywordForm" class="search-form" novalidate action="javascript:void(0);" onsubmit="return false;">
+        <div class="search-row">
+          <label class="input-label" for="keywordInput">Keyword Search Bar</label>
+          <input id="keywordInput" class="search-input" type="text" autocomplete="off"
+            onkeydown="if(event.key==='Enter'||event.keyCode===13){event.preventDefault();event.stopPropagation();return false;}"
+            onkeypress="if(event.key==='Enter'||event.keyCode===13){event.preventDefault();event.stopPropagation();return false;}"
+            placeholder="Start typing keyword (e.g., sports watch, stainless steel pipes)" />
+          <div id="dropdown" class="dropdown" role="listbox" aria-label="Autocomplete suggestions"></div>
+        </div>
+        <div class="hint">Suggestions update live. Click a listed keyword to fetch mapping immediately, or press Enter to
+          use typed text.
+        </div>
+      </form>
       <div id="selectionStatus" class="status info">No keyword selected yet.</div>
       <div id="mappingMeta" class="status info" style="display:none;"></div>
       <div id="mappingSummary" class="mapping-summary"></div>
@@ -569,6 +577,7 @@
 
   <script>
     const els = {
+      keywordForm: document.getElementById("keywordForm"),
       keywordInput: document.getElementById("keywordInput"),
       dropdown: document.getElementById("dropdown"),
       selectionStatus: document.getElementById("selectionStatus"),
@@ -592,7 +601,33 @@
       selectedFromSuggestion: false,
       debounceId: null,
       loadingSuggestionIndex: -1,
+      enterInFlight: false,
     };
+
+    // Safety net: never allow browser default submit navigation from this page.
+    document.addEventListener("submit", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    }, true);
+
+    function isEnterKey(event) {
+      return event.key === "Enter"
+        || event.key === "NumpadEnter"
+        || event.code === "Enter"
+        || event.code === "NumpadEnter"
+        || event.keyCode === 13
+        || event.which === 13;
+    }
+
+    function hardCancelEvent(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === "function") {
+        event.stopImmediatePropagation();
+      }
+      event.returnValue = false;
+      event.cancelBubble = true;
+    }
 
     const API_BASE_URL = (() => {
       const host = window.location.hostname;
@@ -644,15 +679,6 @@
       return String(decision).replace(/_/g, " ");
     }
 
-    function relevanceScore(card) {
-      const corr = Number(card?.correlation_pct || 0);
-      const confPct = Number(card?.confidence || 0) <= 1
-        ? Number(card?.confidence || 0) * 100
-        : Number(card?.confidence || 0);
-      const covPct = Number(card?.avg_token_coverage || 0) * 100;
-      return (0.5 * corr) + (0.35 * confPct) + (0.15 * covPct);
-    }
-
     function pickVisibleCards(cards, data, selectedMode) {
       if (!Array.isArray(cards) || !cards.length) {
         return [];
@@ -662,43 +688,20 @@
         return cards.slice(0, 1);
       }
 
-      const scored = cards.slice(0, 3).map((card) => ({
-        ...card,
-        _uiScore: relevanceScore(card),
-      }));
-
-      const first = scored[0];
-      const second = scored[1];
-      const third = scored[2];
-      let count = 1;
-
-      if (second) {
-        const confirmThresholdPct = Number(data?.thresholds?.confirm || 0) * 100;
-        const secondConfPct = Number(second.confidence || 0) <= 1
-          ? Number(second.confidence || 0) * 100
-          : Number(second.confidence || 0);
-        const secondClose = second._uiScore >= first._uiScore * 0.68;
-        const secondStrong = second._uiScore >= 8.5 || secondConfPct >= confirmThresholdPct;
-        if (secondClose && secondStrong) {
-          count = 2;
-        }
+      if (data?.decision === "confirm") {
+        return cards.slice(0, 2);
       }
 
-      if (third && count === 2 && data?.decision !== "confirm") {
-        const thirdClose = third._uiScore >= second._uiScore * 0.75;
-        const thirdStrong = third._uiScore >= 8.0;
-        if (thirdClose && thirdStrong) {
-          count = 3;
-        }
-      }
-
-      return scored.slice(0, count).map(({ _uiScore, ...card }) => card);
+      return cards.slice(0, 3);
     }
 
     function renderMappingSummary(data, keyword, selectedMode) {
       const lanes = Array.isArray(data.lanes_used) && data.lanes_used.length
         ? data.lanes_used.join(" -> ")
         : "none";
+      const alerts = Array.isArray(data.alerts) ? data.alerts : [];
+      const alertLabel = alerts.length ? alerts.join(", ") : "none";
+      const phase3Label = data.phase3_active ? "enabled" : "disabled";
 
       const hint = selectedMode
         ? "Suggestion selected: showing only the best mapped category."
@@ -715,6 +718,8 @@
           <div class="summary-kv"><div class="summary-k">Confidence</div><div class="summary-v">${toPercent(data.confidence || 0, 1)}</div></div>
           <div class="summary-kv"><div class="summary-k">Margin</div><div class="summary-v">${toPercent(data.margin || 0, 1)}</div></div>
           <div class="summary-kv"><div class="summary-k">Lanes Used</div><div class="summary-v">${escapeHtml(lanes)}</div></div>
+          <div class="summary-kv"><div class="summary-k">Phase 3 Canary</div><div class="summary-v">${escapeHtml(phase3Label)}</div></div>
+          <div class="summary-kv"><div class="summary-k">Alerts</div><div class="summary-v">${escapeHtml(alertLabel)}</div></div>
           <div class="summary-kv"><div class="summary-k">Hint</div><div class="summary-v">${escapeHtml(hint)}</div></div>
         </div>
       `;
@@ -863,6 +868,8 @@
         const data = await response.json();
         const allCards = Array.isArray(data.cards) ? data.cards : [];
         const cards = pickVisibleCards(allCards, data, state.selectedFromSuggestion);
+        const hiddenCount = Math.max(0, allCards.length - cards.length);
+        const alerts = Array.isArray(data.alerts) ? data.alerts : [];
 
         renderMappingSummary(data, keyword, state.selectedFromSuggestion);
 
@@ -907,6 +914,16 @@
                         <span class="pill">Token+AND: ${escapeHtml(card.ranking_basis?.token_and_hits ?? 0)}</span>
                         <span class="pill">Semantic: ${escapeHtml(card.ranking_basis?.semantic_hits ?? 0)}</span>
                         <span class="pill">Product votes: ${escapeHtml(card.ranking_basis?.product_vote_hits ?? 0)}</span>
+                        <span class="pill">Total evidence: ${escapeHtml(card.ranking_basis?.total_evidence_hits ?? card.count ?? 0)}</span>
+                      </div>
+                    </div>
+                    <div class="evidence-block">
+                      <div class="evidence-title">Lane Contributions</div>
+                      <div class="meta">
+                        <span class="pill">Lexical: ${toPercent(card.lane_score_pct?.lexical ?? 0, 1)}</span>
+                        <span class="pill">Semantic: ${toPercent(card.lane_score_pct?.semantic ?? 0, 1)}</span>
+                        <span class="pill">Product vote: ${toPercent(card.lane_score_pct?.product_vote ?? 0, 1)}</span>
+                        <span class="pill">Raw conf: ${toPercent(card.confidence_raw ?? card.confidence ?? 0, 1)}</span>
                       </div>
                     </div>
                     <div class="evidence-block">
@@ -924,10 +941,23 @@
           )
           .join("");
 
+        let hiddenReason = "";
+        if (hiddenCount > 0) {
+          if (state.selectedFromSuggestion) {
+            hiddenReason = ` Hidden ${hiddenCount} (suggestion mode shows top 1).`;
+          } else if (data.decision === "confirm") {
+            hiddenReason = ` Hidden ${hiddenCount} (confirm mode shows top 2).`;
+          } else {
+            hiddenReason = ` Hidden ${hiddenCount} (UI cap keeps top 3).`;
+          }
+        }
+
+        const alertReason = alerts.length ? ` Alerts: ${alerts.join(", ")}.` : "";
+
         setStatus(
           els.mappingMeta,
           "ok",
-          `Loaded ${allCards.length} mapped categories, showing ${cards.length} in ${data.latency_ms} ms. Decision: ${formatDecision(data.decision)}.`
+          `Loaded ${allCards.length} mapped categories, showing ${cards.length} in ${data.latency_ms} ms. Decision: ${formatDecision(data.decision)}.${hiddenReason}${alertReason}`
         );
       } catch (error) {
         setStatus(els.mappingMeta, "error", `Unable to load hierarchy cards: ${error.message}`);
@@ -1009,7 +1039,64 @@
       }
     }
 
+    async function submitKeywordSelection() {
+      if (state.suggestions.length && state.activeIndex >= 0) {
+        selectSuggestion(state.suggestions[state.activeIndex], { fromSuggestion: true });
+      } else {
+        selectSuggestion(els.keywordInput.value, { fromSuggestion: false });
+      }
+      await loadHierarchyCards(state.selectedKeyword);
+    }
+
     els.keywordInput.addEventListener("input", onInputChange);
+
+    document.addEventListener("keydown", async (event) => {
+      if (!isEnterKey(event)) {
+        return;
+      }
+
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+
+      const inSearchPanel = !!target.closest("#searchPanel");
+      if (!inSearchPanel) {
+        return;
+      }
+
+      // Always block default Enter submit/navigation inside search panel.
+      hardCancelEvent(event);
+
+      if (document.activeElement !== els.keywordInput) {
+        return;
+      }
+
+      if (state.enterInFlight) {
+        return;
+      }
+
+      state.enterInFlight = true;
+      try {
+        await submitKeywordSelection();
+      } finally {
+        state.enterInFlight = false;
+      }
+    }, true);
+
+    document.addEventListener("keypress", (event) => {
+      if (!isEnterKey(event)) {
+        return;
+      }
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+      if (!target.closest("#searchPanel")) {
+        return;
+      }
+      hardCancelEvent(event);
+    }, true);
 
     els.keywordInput.addEventListener("keydown", async (event) => {
       if (event.key === "ArrowDown") {
@@ -1032,20 +1119,17 @@
         return;
       }
 
-      if (event.key === "Enter") {
-        event.preventDefault();
-        if (state.suggestions.length && state.activeIndex >= 0) {
-          selectSuggestion(state.suggestions[state.activeIndex], { fromSuggestion: true });
-        } else {
-          selectSuggestion(els.keywordInput.value, { fromSuggestion: false });
-        }
-        await loadHierarchyCards(state.selectedKeyword);
-      }
-
       if (event.key === "Escape") {
         closeDropdown();
       }
     });
+
+    if (els.keywordForm) {
+      els.keywordForm.addEventListener("submit", async (event) => {
+        hardCancelEvent(event);
+        await submitKeywordSelection();
+      });
+    }
 
     els.dropdown.addEventListener("mousedown", async (event) => {
       const target = event.target;

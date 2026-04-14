@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from .clients import es
-from .config import SUPPLIER_INDEX
+from .config import SUPPLIER_ENRICHMENT_ENABLED, SUPPLIER_INDEX
 from .logger import log
 
 try:
@@ -19,11 +19,14 @@ except ImportError:
 async def lifespan(_app):
     """Pre-warm runtime dependencies at startup."""
     try:
-        if es.indices.exists(index=SUPPLIER_INDEX):
-            count = es.count(index=SUPPLIER_INDEX)["count"]
-            log.info("Supplier index '%s': %s suppliers ready", SUPPLIER_INDEX, f"{count:,}")
+        if SUPPLIER_ENRICHMENT_ENABLED and SUPPLIER_INDEX.strip():
+            if es.indices.exists(index=SUPPLIER_INDEX):
+                count = es.count(index=SUPPLIER_INDEX)["count"]
+                log.info("Supplier index '%s': %s suppliers ready", SUPPLIER_INDEX, f"{count:,}")
+            else:
+                log.warning("Supplier index '%s' not found", SUPPLIER_INDEX)
         else:
-            log.warning("Supplier index '%s' not found", SUPPLIER_INDEX)
+            log.info("Supplier enrichment disabled; skipping supplier index checks")
     except Exception as exc:
         log.warning("Elasticsearch unavailable at startup: %s", exc)
 

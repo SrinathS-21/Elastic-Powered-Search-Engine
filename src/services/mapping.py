@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import math
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 try:
@@ -14,6 +18,21 @@ try:
         KEYWORD_CLUSTER_FETCH_SIZE,
         KEYWORD_INDEX,
         KEYWORD_P95_PRODUCT_COUNT,
+        MAPPING_ALERT_LOW_CONFIDENCE_THRESHOLD as CONFIG_MAPPING_ALERT_LOW_CONFIDENCE_THRESHOLD,
+        MAPPING_ALERT_LOW_MARGIN_THRESHOLD as CONFIG_MAPPING_ALERT_LOW_MARGIN_THRESHOLD,
+        MAPPING_ALERT_PRODUCT_DOMINANCE_RATIO as CONFIG_MAPPING_ALERT_PRODUCT_DOMINANCE_RATIO,
+        MAPPING_ENABLE_CONFIDENCE_CALIBRATION as CONFIG_MAPPING_ENABLE_CONFIDENCE_CALIBRATION,
+        MAPPING_ENABLE_LEARNED_CONFIDENCE_CALIBRATION as CONFIG_MAPPING_ENABLE_LEARNED_CONFIDENCE_CALIBRATION,
+        MAPPING_ENABLE_PRODUCT_FALLBACK as CONFIG_MAPPING_ENABLE_PRODUCT_FALLBACK,
+        MAPPING_ENABLE_SEMANTIC_FALLBACK as CONFIG_MAPPING_ENABLE_SEMANTIC_FALLBACK,
+        MAPPING_PHASE3_CANARY_PERCENT as CONFIG_MAPPING_PHASE3_CANARY_PERCENT,
+        MAPPING_CONFIDENCE_MODEL_FILE as CONFIG_MAPPING_CONFIDENCE_MODEL_FILE,
+        MAPPING_TELEMETRY_ENABLED as CONFIG_MAPPING_TELEMETRY_ENABLED,
+        MAPPING_TELEMETRY_FILE as CONFIG_MAPPING_TELEMETRY_FILE,
+        PRODUCT_FALLBACK_MAX_GAIN_RATIO as CONFIG_PRODUCT_FALLBACK_MAX_GAIN_RATIO,
+        PRODUCT_FALLBACK_NEW_CATEGORY_CAP_RATIO as CONFIG_PRODUCT_FALLBACK_NEW_CATEGORY_CAP_RATIO,
+        PRODUCT_FALLBACK_STRONG_CONFIDENCE as CONFIG_PRODUCT_FALLBACK_STRONG_CONFIDENCE,
+        PRODUCT_FALLBACK_STRONG_COVERAGE as CONFIG_PRODUCT_FALLBACK_STRONG_COVERAGE,
         PRODUCT_FALLBACK_TRIGGER as CONFIG_PRODUCT_FALLBACK_TRIGGER,
         PRODUCT_MAIN_VOTE_SHARE as CONFIG_PRODUCT_MAIN_VOTE_SHARE,
         PRODUCT_SHORT_VOTE_SHARE as CONFIG_PRODUCT_SHORT_VOTE_SHARE,
@@ -22,8 +41,10 @@ try:
         SEMANTIC_CLUSTER_WEIGHT as CONFIG_SEMANTIC_CLUSTER_WEIGHT,
     )
     from .internal.common import as_text, clamp, index_exists, trim_terms
+    from .internal.calibration import apply_isotonic_calibration, is_calibration_model_valid
     from .internal.query_text import (
         build_query_context,
+        canonical_token_list,
         canonical_tokens,
         normalize_query_text,
         significant_tokens,
@@ -42,6 +63,21 @@ except ImportError:
         KEYWORD_CLUSTER_FETCH_SIZE,
         KEYWORD_INDEX,
         KEYWORD_P95_PRODUCT_COUNT,
+        MAPPING_ALERT_LOW_CONFIDENCE_THRESHOLD as CONFIG_MAPPING_ALERT_LOW_CONFIDENCE_THRESHOLD,
+        MAPPING_ALERT_LOW_MARGIN_THRESHOLD as CONFIG_MAPPING_ALERT_LOW_MARGIN_THRESHOLD,
+        MAPPING_ALERT_PRODUCT_DOMINANCE_RATIO as CONFIG_MAPPING_ALERT_PRODUCT_DOMINANCE_RATIO,
+        MAPPING_ENABLE_CONFIDENCE_CALIBRATION as CONFIG_MAPPING_ENABLE_CONFIDENCE_CALIBRATION,
+        MAPPING_ENABLE_LEARNED_CONFIDENCE_CALIBRATION as CONFIG_MAPPING_ENABLE_LEARNED_CONFIDENCE_CALIBRATION,
+        MAPPING_ENABLE_PRODUCT_FALLBACK as CONFIG_MAPPING_ENABLE_PRODUCT_FALLBACK,
+        MAPPING_ENABLE_SEMANTIC_FALLBACK as CONFIG_MAPPING_ENABLE_SEMANTIC_FALLBACK,
+        MAPPING_PHASE3_CANARY_PERCENT as CONFIG_MAPPING_PHASE3_CANARY_PERCENT,
+        MAPPING_CONFIDENCE_MODEL_FILE as CONFIG_MAPPING_CONFIDENCE_MODEL_FILE,
+        MAPPING_TELEMETRY_ENABLED as CONFIG_MAPPING_TELEMETRY_ENABLED,
+        MAPPING_TELEMETRY_FILE as CONFIG_MAPPING_TELEMETRY_FILE,
+        PRODUCT_FALLBACK_MAX_GAIN_RATIO as CONFIG_PRODUCT_FALLBACK_MAX_GAIN_RATIO,
+        PRODUCT_FALLBACK_NEW_CATEGORY_CAP_RATIO as CONFIG_PRODUCT_FALLBACK_NEW_CATEGORY_CAP_RATIO,
+        PRODUCT_FALLBACK_STRONG_CONFIDENCE as CONFIG_PRODUCT_FALLBACK_STRONG_CONFIDENCE,
+        PRODUCT_FALLBACK_STRONG_COVERAGE as CONFIG_PRODUCT_FALLBACK_STRONG_COVERAGE,
         PRODUCT_FALLBACK_TRIGGER as CONFIG_PRODUCT_FALLBACK_TRIGGER,
         PRODUCT_MAIN_VOTE_SHARE as CONFIG_PRODUCT_MAIN_VOTE_SHARE,
         PRODUCT_SHORT_VOTE_SHARE as CONFIG_PRODUCT_SHORT_VOTE_SHARE,
@@ -50,8 +86,10 @@ except ImportError:
         SEMANTIC_CLUSTER_WEIGHT as CONFIG_SEMANTIC_CLUSTER_WEIGHT,
     )
     from services.internal.common import as_text, clamp, index_exists, trim_terms
+    from services.internal.calibration import apply_isotonic_calibration, is_calibration_model_valid
     from services.internal.query_text import (
         build_query_context,
+        canonical_token_list,
         canonical_tokens,
         normalize_query_text,
         significant_tokens,
@@ -69,10 +107,105 @@ AUTO_MAP_CONFIDENCE = CONFIG_AUTO_MAP_CONFIDENCE
 AUTO_MAP_MARGIN = CONFIG_AUTO_MAP_MARGIN
 CONFIRM_MAP_CONFIDENCE = CONFIG_CONFIRM_MAP_CONFIDENCE
 PRODUCT_FALLBACK_TRIGGER = CONFIG_PRODUCT_FALLBACK_TRIGGER
+PRODUCT_FALLBACK_MAX_GAIN_RATIO = CONFIG_PRODUCT_FALLBACK_MAX_GAIN_RATIO
+PRODUCT_FALLBACK_NEW_CATEGORY_CAP_RATIO = CONFIG_PRODUCT_FALLBACK_NEW_CATEGORY_CAP_RATIO
+PRODUCT_FALLBACK_STRONG_CONFIDENCE = CONFIG_PRODUCT_FALLBACK_STRONG_CONFIDENCE
+PRODUCT_FALLBACK_STRONG_COVERAGE = CONFIG_PRODUCT_FALLBACK_STRONG_COVERAGE
+MAPPING_PHASE3_CANARY_PERCENT = CONFIG_MAPPING_PHASE3_CANARY_PERCENT
+MAPPING_ENABLE_CONFIDENCE_CALIBRATION = CONFIG_MAPPING_ENABLE_CONFIDENCE_CALIBRATION
+MAPPING_ENABLE_LEARNED_CONFIDENCE_CALIBRATION = CONFIG_MAPPING_ENABLE_LEARNED_CONFIDENCE_CALIBRATION
+MAPPING_ENABLE_SEMANTIC_FALLBACK = CONFIG_MAPPING_ENABLE_SEMANTIC_FALLBACK
+MAPPING_ENABLE_PRODUCT_FALLBACK = CONFIG_MAPPING_ENABLE_PRODUCT_FALLBACK
+MAPPING_TELEMETRY_ENABLED = CONFIG_MAPPING_TELEMETRY_ENABLED
+MAPPING_TELEMETRY_FILE = CONFIG_MAPPING_TELEMETRY_FILE
+MAPPING_CONFIDENCE_MODEL_FILE = CONFIG_MAPPING_CONFIDENCE_MODEL_FILE
+MAPPING_ALERT_LOW_CONFIDENCE_THRESHOLD = CONFIG_MAPPING_ALERT_LOW_CONFIDENCE_THRESHOLD
+MAPPING_ALERT_LOW_MARGIN_THRESHOLD = CONFIG_MAPPING_ALERT_LOW_MARGIN_THRESHOLD
+MAPPING_ALERT_PRODUCT_DOMINANCE_RATIO = CONFIG_MAPPING_ALERT_PRODUCT_DOMINANCE_RATIO
 SEMANTIC_CLUSTER_WEIGHT = CONFIG_SEMANTIC_CLUSTER_WEIGHT
 PRODUCT_VOTE_WEIGHT = CONFIG_PRODUCT_VOTE_WEIGHT
 PRODUCT_MAIN_VOTE_SHARE = CONFIG_PRODUCT_MAIN_VOTE_SHARE
 PRODUCT_SHORT_VOTE_SHARE = CONFIG_PRODUCT_SHORT_VOTE_SHARE
+
+_CONFIDENCE_MODEL_CACHE: dict[str, Any] | None = None
+_CONFIDENCE_MODEL_MTIME: float | None = None
+
+
+DEMOGRAPHIC_TOKENS = {
+    "women", "woman", "ladies", "lady", "men", "man", "male", "female",
+    "boys", "boy", "girls", "girl", "kids", "kid", "children", "child", "unisex",
+}
+
+
+def _phase3_enabled_for_query(query_text: str) -> bool:
+    percent = clamp(float(MAPPING_PHASE3_CANARY_PERCENT), 0.0, 100.0)
+    if percent >= 100.0:
+        return True
+    if percent <= 0.0:
+        return False
+
+    digest = hashlib.sha1(as_text(query_text).encode("utf-8")).hexdigest()[:8]
+    bucket = (int(digest, 16) / 0xFFFFFFFF) * 100.0
+    return bucket < percent
+
+
+def _emit_mapping_telemetry(payload: dict[str, Any]) -> None:
+    if not MAPPING_TELEMETRY_ENABLED:
+        return
+
+    try:
+        log_path = Path(MAPPING_TELEMETRY_FILE)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, ensure_ascii=True) + "\n")
+    except Exception:
+        pass
+
+
+def _load_confidence_model() -> dict[str, Any] | None:
+    global _CONFIDENCE_MODEL_CACHE
+    global _CONFIDENCE_MODEL_MTIME
+
+    if not MAPPING_ENABLE_LEARNED_CONFIDENCE_CALIBRATION:
+        return None
+
+    model_path = Path(MAPPING_CONFIDENCE_MODEL_FILE)
+    if not model_path.exists():
+        _CONFIDENCE_MODEL_CACHE = None
+        _CONFIDENCE_MODEL_MTIME = None
+        return None
+
+    try:
+        mtime = model_path.stat().st_mtime
+    except Exception:
+        return _CONFIDENCE_MODEL_CACHE
+
+    if _CONFIDENCE_MODEL_CACHE is not None and _CONFIDENCE_MODEL_MTIME == mtime:
+        return _CONFIDENCE_MODEL_CACHE
+
+    try:
+        payload = json.loads(model_path.read_text(encoding="utf-8"))
+    except Exception:
+        return _CONFIDENCE_MODEL_CACHE
+
+    if not isinstance(payload, dict) or not is_calibration_model_valid(payload):
+        return _CONFIDENCE_MODEL_CACHE
+
+    _CONFIDENCE_MODEL_CACHE = payload
+    _CONFIDENCE_MODEL_MTIME = mtime
+    return _CONFIDENCE_MODEL_CACHE
+
+
+def _learned_confidence(raw_confidence: float) -> tuple[float | None, bool]:
+    model = _load_confidence_model()
+    if not model:
+        return None, False
+
+    try:
+        calibrated = apply_isotonic_calibration(raw_confidence, model)
+    except Exception:
+        return None, False
+    return clamp(float(calibrated), 0.0, 1.0), True
 
 
 def _reliability_factor(product_count: int, category_count: int) -> float:
@@ -242,9 +375,69 @@ def _cluster_match_signal(source: dict, normalized_query: str, query_tokens: lis
     return best
 
 
+def _query_anchor_constraints(query_context: dict[str, Any]) -> dict[str, Any]:
+    canonical_intent_tokens = [
+        as_text(token).lower().strip()
+        for token in (query_context.get("canonical_intent_tokens") or [])
+        if as_text(token).strip()
+    ]
+    raw_anchor_tokens = [
+        as_text(token).lower().strip()
+        for token in (query_context.get("anchor_tokens") or [])
+        if as_text(token).strip()
+    ]
+    canonical_anchor_tokens = canonical_tokens(raw_anchor_tokens)
+    if not canonical_anchor_tokens:
+        canonical_anchor_tokens = canonical_intent_tokens[-2:] if len(canonical_intent_tokens) >= 2 else canonical_intent_tokens[:]
+
+    domain_anchors = {token for token in canonical_anchor_tokens if token and token not in DEMOGRAPHIC_TOKENS}
+    demographic_anchors = {token for token in canonical_anchor_tokens if token in DEMOGRAPHIC_TOKENS}
+
+    return {
+        "domain": domain_anchors,
+        "demographic": demographic_anchors,
+        "strict": bool(len(canonical_intent_tokens) >= 3 and domain_anchors),
+    }
+
+
+def _cluster_anchor_signal(source: dict[str, Any], domain_anchors: set[str], demographic_anchors: set[str]) -> float:
+    if not domain_anchors and not demographic_anchors:
+        return 1.0
+
+    corpus: list[str] = []
+    keyword_name = as_text(source.get("keyword_name"))
+    if keyword_name:
+        corpus.append(keyword_name)
+
+    corpus.extend(trim_terms(source.get("variant_terms") or [], 12))
+    corpus.extend(trim_terms(source.get("long_tail_terms") or [], 8))
+
+    head_terms = source.get("head_terms") or []
+    if len(head_terms) <= HEAD_TERMS_HARD_CAP:
+        corpus.extend(trim_terms(head_terms, 8))
+
+    token_pool: set[str] = set()
+    for value in corpus:
+        token_pool.update(canonical_token_list(value))
+
+    if not token_pool:
+        return 0.0
+
+    domain_overlap = len(domain_anchors & token_pool) / max(1, len(domain_anchors)) if domain_anchors else 1.0
+    demographic_overlap = (
+        len(demographic_anchors & token_pool) / max(1, len(demographic_anchors))
+        if demographic_anchors
+        else 1.0
+    )
+    return clamp((0.8 * domain_overlap) + (0.2 * demographic_overlap), 0.0, 1.0)
+
+
 def _new_vote_bucket() -> dict[str, Any]:
     return {
         "raw_score": 0.0,
+        "raw_lexical_score": 0.0,
+        "raw_semantic_score": 0.0,
+        "raw_product_vote_score": 0.0,
         "cluster_hits": 0,
         "lexical_cluster_hits": 0,
         "semantic_cluster_hits": 0,
@@ -263,11 +456,16 @@ def _accumulate_cluster_votes(
     normalized_query: str,
     lane: str,
     lane_weight: float,
+    domain_anchors: set[str] | None = None,
+    demographic_anchors: set[str] | None = None,
+    strict_anchor: bool = False,
 ) -> int:
     if not hits:
         return 0
 
     query_tokens = token_list(normalized_query)
+    required_domain_anchors = domain_anchors or set()
+    preferred_demographic_anchors = demographic_anchors or set()
     max_score = max((float(hit.get("_score") or 0.0) for hit in hits), default=1.0) or 1.0
     docs_used = 0
 
@@ -282,8 +480,17 @@ def _accumulate_cluster_votes(
         category_count = int(source.get("category_count") or len(set(category_ids)) or 1)
         reliability = _reliability_factor(product_count, category_count)
         match_signal = _cluster_match_signal(source, normalized_query, query_tokens)
+        anchor_signal = _cluster_anchor_signal(source, required_domain_anchors, preferred_demographic_anchors)
+        if strict_anchor and required_domain_anchors and anchor_signal <= 0.0:
+            continue
+
+        if required_domain_anchors:
+            match_signal = clamp((0.7 * match_signal) + (0.3 * anchor_signal), 0.0, 1.0)
+
         score_norm = clamp(float(hit.get("_score") or 0.0) / max_score, 0.0, 1.0)
         doc_vote = lane_weight * ((0.55 * score_norm) + (0.45 * match_signal)) * reliability
+        if required_domain_anchors:
+            doc_vote *= (0.6 + (0.4 * anchor_signal))
         per_category_vote = doc_vote / max(1, len(set(category_ids)))
 
         docs_used += 1
@@ -295,8 +502,10 @@ def _accumulate_cluster_votes(
             bucket["cluster_hits"] += 1
             if lane == "semantic":
                 bucket["semantic_cluster_hits"] += 1
+                bucket["raw_semantic_score"] += per_category_vote
             else:
                 bucket["lexical_cluster_hits"] += 1
+                bucket["raw_lexical_score"] += per_category_vote
 
             bucket["support_sum"] += float(product_count)
             bucket["ambiguity_sum"] += float(category_count)
@@ -383,6 +592,7 @@ def _product_category_vote_hits(query_text: str, size: int = 48) -> tuple[dict[s
             weight = PRODUCT_VOTE_WEIGHT * vector_weight * clamp(float(hit.get("_score") or 0.0) / max_score, 0.0, 1.0)
             bucket = category_votes.setdefault(category_id, _new_vote_bucket())
             bucket["raw_score"] += weight
+            bucket["raw_product_vote_score"] += weight
             bucket["product_vote_hits"] += 1
             bucket["support_sum"] += 1.0
             bucket["ambiguity_sum"] += 1.0
@@ -449,22 +659,86 @@ def _resolve_category_meta(category_ids: list[str]) -> dict[str, dict[str, str]]
     return meta
 
 
-def _build_mapping_cards(category_votes: dict[str, dict[str, Any]], max_cards: int) -> list[dict]:
+def _calibrated_confidence(bucket: dict[str, Any], total_score: float) -> tuple[float, float]:
+    raw_share = clamp(float(bucket.get("raw_score") or 0.0) / max(total_score, 1e-9), 0.0, 1.0)
+    evidence_count = max(1, int(bucket.get("cluster_hits") or 0) + int(bucket.get("product_vote_hits") or 0))
+    lexical_hits = int(bucket.get("lexical_cluster_hits") or 0)
+    semantic_hits = int(bucket.get("semantic_cluster_hits") or 0)
+    product_vote_hits = int(bucket.get("product_vote_hits") or 0)
+
+    lex_sem_hits = lexical_hits + semantic_hits
+    lex_sem_ratio = clamp(lex_sem_hits / max(1, evidence_count), 0.0, 1.0)
+    avg_signal = clamp(float(bucket.get("match_signal_sum") or 0.0) / evidence_count, 0.0, 1.0)
+    avg_ambiguity = float(bucket.get("ambiguity_sum") or 0.0) / evidence_count
+    ambiguity_penalty = 1.0 / (1.0 + 0.12 * max(0.0, avg_ambiguity - 1.0))
+
+    calibrated = clamp(
+        (0.55 * raw_share)
+        + (0.25 * avg_signal)
+        + (0.15 * lex_sem_ratio)
+        + (0.05 * ambiguity_penalty),
+        0.0,
+        1.0,
+    )
+
+    # Penalize pure product-vote dominance when lexical/semantic evidence is weak.
+    if product_vote_hits > (lex_sem_hits * 2) and lex_sem_hits < 4:
+        calibrated *= 0.76
+
+    return raw_share, clamp(calibrated, 0.0, 1.0)
+
+
+def _build_mapping_cards(
+    category_votes: dict[str, dict[str, Any]],
+    max_cards: int,
+    use_calibrated_confidence: bool,
+) -> list[dict]:
     if not category_votes:
         return []
 
-    ordered = sorted(category_votes.items(), key=lambda item: item[1]["raw_score"], reverse=True)
+    ordered = sorted(
+        category_votes.items(),
+        key=lambda item: (
+            -float(item[1].get("raw_score") or 0.0),
+            -int(item[1].get("lexical_cluster_hits") or 0),
+            -int(item[1].get("semantic_cluster_hits") or 0),
+            -int(item[1].get("cluster_hits") or 0),
+            -float(item[1].get("match_signal_sum") or 0.0),
+            as_text(item[0]),
+        ),
+    )
     total_score = sum(item[1]["raw_score"] for item in ordered) or 1.0
     top_ids = [category_id for category_id, _bucket in ordered[: max(6, max_cards * 2)]]
     category_meta = _resolve_category_meta(top_ids)
 
     cards: list[dict] = []
     for category_id, bucket in ordered[:max_cards]:
-        confidence = clamp(bucket["raw_score"] / total_score, 0.0, 1.0)
         evidence_count = max(1, bucket["cluster_hits"] + bucket["product_vote_hits"])
         avg_support = bucket["support_sum"] / evidence_count
         avg_ambiguity = bucket["ambiguity_sum"] / evidence_count
         avg_signal = clamp(bucket["match_signal_sum"] / evidence_count, 0.0, 1.0)
+        raw_confidence, heuristic_confidence = _calibrated_confidence(bucket, total_score)
+        learned_confidence: float | None = None
+        confidence_model_used = False
+        if use_calibrated_confidence:
+            learned_confidence, confidence_model_used = _learned_confidence(raw_confidence)
+            confidence = learned_confidence if learned_confidence is not None else heuristic_confidence
+        else:
+            confidence = raw_confidence
+        lexical_hits = int(bucket["lexical_cluster_hits"])
+        semantic_hits = int(bucket["semantic_cluster_hits"])
+        product_vote_hits = int(bucket["product_vote_hits"])
+        total_evidence_hits = int(bucket["cluster_hits"] + bucket["product_vote_hits"])
+        lane_scores = {
+            "lexical": float(bucket.get("raw_lexical_score") or 0.0),
+            "semantic": float(bucket.get("raw_semantic_score") or 0.0),
+            "product_vote": float(bucket.get("raw_product_vote_score") or 0.0),
+        }
+        lane_total = sum(lane_scores.values()) or 1.0
+        lane_score_pct = {
+            lane: round((score / lane_total) * 100.0, 1)
+            for lane, score in lane_scores.items()
+        }
 
         names = category_meta.get(category_id, {})
         breadcrumb = " >> ".join(
@@ -483,28 +757,40 @@ def _build_mapping_cards(category_votes: dict[str, dict[str, Any]], max_cards: i
             {
                 "product_category_id": category_id,
                 "breadcrumb": breadcrumb,
-                "count": int(bucket["cluster_hits"] or bucket["product_vote_hits"]),
-                "correlation_pct": round(confidence * 100, 1),
+                "count": total_evidence_hits,
+                "correlation_pct": round(raw_confidence * 100, 1),
                 "avg_token_coverage": round(avg_signal, 3),
                 "ranking_basis": {
-                    "lexical_cluster_hits": int(bucket["lexical_cluster_hits"]),
-                    "semantic_cluster_hits": int(bucket["semantic_cluster_hits"]),
-                    "product_vote_hits": int(bucket["product_vote_hits"]),
+                    "lexical_cluster_hits": lexical_hits,
+                    "semantic_cluster_hits": semantic_hits,
+                    "product_vote_hits": product_vote_hits,
                     "cluster_hits": int(bucket["cluster_hits"]),
-                    "exact_hits": int(bucket["lexical_cluster_hits"]),
+                    "total_evidence_hits": total_evidence_hits,
+                    "exact_hits": lexical_hits,
                     "prefix_hits": 0,
                     "token_and_hits": 0,
-                    "semantic_hits": int(bucket["semantic_cluster_hits"]),
+                    "semantic_hits": semantic_hits,
                 },
+                "lane_scores": {
+                    "lexical": round(lane_scores["lexical"], 4),
+                    "semantic": round(lane_scores["semantic"], 4),
+                    "product_vote": round(lane_scores["product_vote"], 4),
+                },
+                "lane_score_pct": lane_score_pct,
                 "sample_products": bucket["sample_products"],
                 "sample_keywords": bucket["sample_keywords"],
                 "confidence": round(confidence, 4),
+                "confidence_raw": round(raw_confidence, 4),
+                "confidence_calibrated_heuristic": round(heuristic_confidence, 4),
+                "confidence_calibrated_learned": round(learned_confidence, 4) if learned_confidence is not None else None,
+                "confidence_model_used": confidence_model_used,
                 "avg_product_support": round(avg_support, 2),
                 "avg_category_ambiguity": round(avg_ambiguity, 2),
                 "reason": (
-                    f"support={avg_support:.2f}, ambiguity={avg_ambiguity:.2f}, "
-                    f"lexical_hits={int(bucket['lexical_cluster_hits'])}, semantic_hits={int(bucket['semantic_cluster_hits'])}, "
-                    f"product_votes={int(bucket['product_vote_hits'])}"
+                    f"conf_raw={raw_confidence:.3f}, conf_cal={confidence:.3f}, conf_heur={heuristic_confidence:.3f}, "
+                    f"conf_model={'on' if confidence_model_used else 'off'}, support={avg_support:.2f}, "
+                    f"ambiguity={avg_ambiguity:.2f}, lexical_hits={lexical_hits}, semantic_hits={semantic_hits}, "
+                    f"product_votes={product_vote_hits}"
                 ),
             }
         )
@@ -527,12 +813,48 @@ def _mapping_decision(cards: list[dict]) -> tuple[str, float, float]:
     return "options", top_conf, margin
 
 
-def map_query_to_categories(query_text: str, selected_suggestion: str | None = None, max_cards: int = 3) -> dict:
+def _mapping_alerts(
+    cards: list[dict],
+    decision: str,
+    margin: float,
+    product_fallback_used: bool,
+) -> list[str]:
+    alerts: list[str] = []
+    if not cards:
+        return ["no_match"]
+
+    top = cards[0]
+    top_conf = float(top.get("confidence") or 0.0)
+    lane_pct = top.get("lane_score_pct") or {}
+    product_vote_pct = float(lane_pct.get("product_vote") or 0.0) / 100.0
+
+    if top_conf < MAPPING_ALERT_LOW_CONFIDENCE_THRESHOLD:
+        alerts.append("low_confidence")
+    if margin < MAPPING_ALERT_LOW_MARGIN_THRESHOLD and len(cards) > 1:
+        alerts.append("low_margin")
+    if product_fallback_used and product_vote_pct >= MAPPING_ALERT_PRODUCT_DOMINANCE_RATIO:
+        alerts.append("product_vote_dominant")
+    if decision == "options" and top_conf >= CONFIRM_MAP_CONFIDENCE:
+        alerts.append("decision_conflict")
+
+    return alerts
+
+
+def map_query_to_categories(
+    query_text: str,
+    selected_suggestion: str | None = None,
+    max_cards: int = 3,
+    emit_telemetry: bool = True,
+) -> dict:
     raw_query = as_text(selected_suggestion) or as_text(query_text)
+    # Canary should control rollout visibility, not core relevance behavior.
+    phase3_active = _phase3_enabled_for_query(raw_query)
+    use_calibrated_confidence = bool(MAPPING_ENABLE_CONFIDENCE_CALIBRATION)
     query_context = build_query_context(raw_query)
     normalized_query = query_context["normalized_query"]
     intent_query = query_context["intent_query"]
     phrase_candidates = query_context["phrase_candidates"]
+    anchor_constraints = _query_anchor_constraints(query_context)
 
     if not normalized_query or not intent_query:
         return {
@@ -552,6 +874,8 @@ def map_query_to_categories(query_text: str, selected_suggestion: str | None = N
             "semantic_used": False,
             "product_fallback_used": False,
             "lanes_used": [],
+            "phase3_active": phase3_active,
+            "alerts": ["no_match"],
         }
 
     category_votes: dict[str, dict[str, Any]] = {}
@@ -568,16 +892,23 @@ def map_query_to_categories(query_text: str, selected_suggestion: str | None = N
         normalized_query=intent_query,
         lane="lexical",
         lane_weight=1.0,
+        domain_anchors=anchor_constraints["domain"],
+        demographic_anchors=anchor_constraints["demographic"],
+        strict_anchor=bool(anchor_constraints["strict"]),
     )
     if lexical_docs:
         lanes_used.append("lexical")
 
     semantic_used = False
     semantic_docs = 0
-    cards = _build_mapping_cards(category_votes, max_cards=max_cards)
+    cards = _build_mapping_cards(
+        category_votes,
+        max_cards=max_cards,
+        use_calibrated_confidence=use_calibrated_confidence,
+    )
     top_conf = float(cards[0].get("confidence") or 0.0) if cards else 0.0
 
-    if top_conf < CONFIRM_MAP_CONFIDENCE and not selected_suggestion:
+    if MAPPING_ENABLE_SEMANTIC_FALLBACK and top_conf < CONFIRM_MAP_CONFIDENCE and not selected_suggestion:
         semantic_hits = _keyword_cluster_semantic_hits(intent_query, size=max(24, KEYWORD_CLUSTER_FETCH_SIZE // 2))
         semantic_docs = _accumulate_cluster_votes(
             category_votes=category_votes,
@@ -585,25 +916,68 @@ def map_query_to_categories(query_text: str, selected_suggestion: str | None = N
             normalized_query=intent_query,
             lane="semantic",
             lane_weight=SEMANTIC_CLUSTER_WEIGHT,
+            domain_anchors=anchor_constraints["domain"],
+            demographic_anchors=anchor_constraints["demographic"],
+            strict_anchor=bool(anchor_constraints["strict"]),
         )
         if semantic_docs:
             semantic_used = True
             lanes_used.append("semantic")
 
-    cards = _build_mapping_cards(category_votes, max_cards=max_cards)
+    cards = _build_mapping_cards(
+        category_votes,
+        max_cards=max_cards,
+        use_calibrated_confidence=use_calibrated_confidence,
+    )
     top_conf = float(cards[0].get("confidence") or 0.0) if cards else 0.0
+
+    pre_fallback_cards = cards[:]
+    pre_fallback_scores = {
+        category_id: float(bucket.get("raw_score") or 0.0)
+        for category_id, bucket in category_votes.items()
+    }
+
+    pre_fallback_top_id = as_text(pre_fallback_cards[0].get("product_category_id")) if pre_fallback_cards else ""
+    pre_fallback_top_score = pre_fallback_scores.get(pre_fallback_top_id, 0.0)
+    pre_fallback_top_conf = float(pre_fallback_cards[0].get("confidence") or 0.0) if pre_fallback_cards else 0.0
+    pre_fallback_top_cov = float(pre_fallback_cards[0].get("avg_token_coverage") or 0.0) if pre_fallback_cards else 0.0
+    pre_fallback_top_lexical_hits = (
+        int((pre_fallback_cards[0].get("ranking_basis") or {}).get("lexical_cluster_hits") or 0)
+        if pre_fallback_cards
+        else 0
+    )
+    strong_primary_intent = bool(
+        pre_fallback_cards
+        and pre_fallback_top_conf >= PRODUCT_FALLBACK_STRONG_CONFIDENCE
+        and pre_fallback_top_cov >= PRODUCT_FALLBACK_STRONG_COVERAGE
+        and pre_fallback_top_lexical_hits >= 4
+    )
 
     product_fallback_used = False
     product_hits = 0
-    if top_conf < PRODUCT_FALLBACK_TRIGGER:
+    if MAPPING_ENABLE_PRODUCT_FALLBACK and top_conf < PRODUCT_FALLBACK_TRIGGER:
         fallback_votes, product_hits = _product_category_vote_hits(intent_query)
         if fallback_votes:
-            product_fallback_used = True
-            lanes_used.append("product_vote")
+            fallback_applied = False
             for category_id, bucket in fallback_votes.items():
+                fallback_scale = 1.0
+                fallback_raw = float(bucket.get("raw_score") or 0.0)
+                if strong_primary_intent and fallback_raw > 0:
+                    if category_id in pre_fallback_scores:
+                        cap = pre_fallback_scores[category_id] * PRODUCT_FALLBACK_MAX_GAIN_RATIO
+                    else:
+                        cap = pre_fallback_top_score * PRODUCT_FALLBACK_NEW_CATEGORY_CAP_RATIO
+                    fallback_scale = clamp((cap / fallback_raw) if cap > 0 else 0.0, 0.0, 1.0)
+
+                if fallback_scale <= 0.0:
+                    continue
+
                 target = category_votes.setdefault(category_id, _new_vote_bucket())
                 for key in (
                     "raw_score",
+                    "raw_lexical_score",
+                    "raw_semantic_score",
+                    "raw_product_vote_score",
                     "cluster_hits",
                     "lexical_cluster_hits",
                     "semantic_cluster_hits",
@@ -612,15 +986,59 @@ def map_query_to_categories(query_text: str, selected_suggestion: str | None = N
                     "ambiguity_sum",
                     "match_signal_sum",
                 ):
-                    target[key] += bucket[key]
+                    target[key] += float(bucket[key]) * fallback_scale
+
+                fallback_applied = True
 
                 for sample_key in ("sample_products", "sample_keywords"):
                     for item in bucket[sample_key]:
                         if item not in target[sample_key] and len(target[sample_key]) < 3:
                             target[sample_key].append(item)
 
-    cards = _build_mapping_cards(category_votes, max_cards=max_cards)
+            if fallback_applied:
+                product_fallback_used = True
+                lanes_used.append("product_vote")
+
+    cards = _build_mapping_cards(
+        category_votes,
+        max_cards=max_cards,
+        use_calibrated_confidence=use_calibrated_confidence,
+    )
+
+    if strong_primary_intent and cards and pre_fallback_top_id:
+        if as_text(cards[0].get("product_category_id")) != pre_fallback_top_id:
+            cards = pre_fallback_cards
+            product_fallback_used = False
+            product_hits = 0
+            lanes_used = [lane for lane in lanes_used if lane != "product_vote"]
+
     decision, confidence, margin = _mapping_decision(cards)
+    alerts = _mapping_alerts(cards=cards, decision=decision, margin=margin, product_fallback_used=product_fallback_used)
+
+    if emit_telemetry:
+        top_card = cards[0] if cards else {}
+        _emit_mapping_telemetry(
+            {
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "query": as_text(query_text),
+                "selected": as_text(selected_suggestion),
+                "phase3_active": phase3_active,
+                "decision": decision,
+                "confidence": round(confidence, 4),
+                "margin": round(margin, 4),
+                "alerts": alerts,
+                "lanes_used": lanes_used,
+                "semantic_used": semantic_used,
+                "product_fallback_used": product_fallback_used,
+                "top_category_id": as_text(top_card.get("product_category_id")),
+                "top_breadcrumb": as_text(top_card.get("breadcrumb")),
+                "top_confidence": float(top_card.get("confidence") or 0.0),
+                "top_confidence_raw": float(top_card.get("confidence_raw") or 0.0),
+                "top_confidence_heuristic": float(top_card.get("confidence_calibrated_heuristic") or 0.0),
+                "top_confidence_model_used": bool(top_card.get("confidence_model_used")),
+                "top_lane_score_pct": top_card.get("lane_score_pct") or {},
+            }
+        )
 
     return {
         "query": query_text,
@@ -640,13 +1058,28 @@ def map_query_to_categories(query_text: str, selected_suggestion: str | None = N
         "product_fallback_used": product_fallback_used,
         "product_vote_hits": int(product_hits),
         "lanes_used": lanes_used,
+        "phase3_active": phase3_active,
+        "alerts": alerts,
     }
 
 
-def current_thresholds() -> dict[str, float]:
+def current_thresholds() -> dict[str, Any]:
     return {
         "auto_map": AUTO_MAP_CONFIDENCE,
         "auto_map_margin": AUTO_MAP_MARGIN,
         "confirm": CONFIRM_MAP_CONFIDENCE,
         "product_fallback": PRODUCT_FALLBACK_TRIGGER,
+        "product_fallback_max_gain_ratio": PRODUCT_FALLBACK_MAX_GAIN_RATIO,
+        "product_fallback_new_category_cap_ratio": PRODUCT_FALLBACK_NEW_CATEGORY_CAP_RATIO,
+        "product_fallback_strong_confidence": PRODUCT_FALLBACK_STRONG_CONFIDENCE,
+        "product_fallback_strong_coverage": PRODUCT_FALLBACK_STRONG_COVERAGE,
+        "phase3_canary_percent": MAPPING_PHASE3_CANARY_PERCENT,
+        "alert_low_confidence": MAPPING_ALERT_LOW_CONFIDENCE_THRESHOLD,
+        "alert_low_margin": MAPPING_ALERT_LOW_MARGIN_THRESHOLD,
+        "alert_product_dominance_ratio": MAPPING_ALERT_PRODUCT_DOMINANCE_RATIO,
+        "enable_confidence_calibration": MAPPING_ENABLE_CONFIDENCE_CALIBRATION,
+        "enable_learned_confidence_calibration": MAPPING_ENABLE_LEARNED_CONFIDENCE_CALIBRATION,
+        "confidence_model_file": MAPPING_CONFIDENCE_MODEL_FILE,
+        "enable_semantic_fallback": MAPPING_ENABLE_SEMANTIC_FALLBACK,
+        "enable_product_fallback": MAPPING_ENABLE_PRODUCT_FALLBACK,
     }

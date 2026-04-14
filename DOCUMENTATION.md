@@ -1,6 +1,6 @@
-# Pepagora Search Functionality Approach (Stakeholder Submission)
+# Pepagora Search Functionality Approach (Submission Document)
 
-Version date: 2026-04-09
+Version date: 2026-04-14
 
 ## 1. Executive Summary
 
@@ -12,6 +12,173 @@ The design is intentionally:
 - Reliability-aware to handle sparse and ambiguous keyword clusters.
 - Fallback-enabled (semantic cluster and product vote) only when confidence is weak.
 - Audit-friendly, with explicit confidence, decision, margin, lanes used, and evidence in API responses.
+
+## 1.1 Use Case
+
+This section explains what user problem is being solved and what success looks like in business terms.
+
+Note: implementation tracker details are maintained separately in `IMPLEMENTATION_TRACKER.md`.
+
+### Use Case Summary
+
+- A B2B buyer enters free-text intent (for example, `ss wire`, `color sorter`, `air compressor`) or selects an autosuggestion.
+- The system maps that intent to the most relevant product category path.
+- The UI returns one of three outcomes:
+  - direct mapping (`auto_map`),
+  - user-assisted confirmation (`confirm`),
+  - alternatives (`options`) for ambiguous cases.
+
+### Use Case Description
+
+Business problem being solved:
+
+- Buyer language is inconsistent (abbreviations, spelling noise, partial terms).
+- Keyword clusters can be sparse and may map to multiple categories.
+- A wrong direct mapping leads to poor browsing flow and lower conversion confidence.
+
+Expected business outcomes:
+
+- Faster buyer navigation to the correct catalog area.
+- Explainable mapping decisions for product, support, and operations teams.
+- Controlled behavior on ambiguous intent instead of forcing risky auto-decisions.
+
+### Success Indicators for This Use Case
+
+- High-quality suggestion acceptance by users.
+- Lower wrong-auto-map incidents.
+- Stable latency at peak hours.
+- Better top-1 or top-3 category acceptance in validation checks.
+
+## 1.2 Approach
+
+This section explains why the architecture is designed this way and how it was implemented.
+
+### Approach We Have Come Up With
+
+The implemented approach is intentionally multi-lane and reliability-aware:
+
+1. Lexical-first mapping and suggestions for speed and explainability.
+2. Reliability weighting using support (`product_count`) and ambiguity (`category_count`).
+3. Conditional semantic-cluster fallback only when lexical confidence is weak.
+4. Product-vote fallback as final safety net when confidence remains below trigger threshold.
+5. Governance and telemetry controls so rollout can be monitored, tuned, and rolled back safely.
+
+### Why This Setup Was Chosen
+
+| Design Choice | Why We Selected It | Business Outcome |
+|---|---|---|
+| Lexical-first suggestion and mapping | Most user intent is resolved quickly with direct keyword evidence, which is easier to explain and audit. | Faster response and lower risk of unexpected category jumps. |
+| Reliability-aware scoring | Data includes sparse and ambiguous clusters; support and ambiguity weighting prevents false confidence. | Fewer wrong auto-maps and better trust in confidence output. |
+| Conditional semantic fallback | Semantic retrieval is useful but should not run blindly for every request. | Better accuracy for weak intents without unnecessary cost or latency. |
+| Product-vote fallback as final safety net | Some difficult queries remain weak after lexical and semantic lanes. | Higher recovery for hard queries and fewer no-match outcomes. |
+| Explicit decision states (`auto_map`, `confirm`, `options`) | Not every query should be forced into one confident decision. | Business can control user experience by confidence level. |
+| Telemetry + guardrails | Rollout quality must remain measurable, auditable, and reversible. | Safer production adoption and clear quality governance. |
+
+### Algorithms/Models We Used
+
+| Area | Algorithm / Model | Why It Is Used |
+|---|---|---|
+| Suggestion ranking | Multi-stage lexical ranking (`exact`, `prefix`, `ordered_phrase`, `ordered_tokens`, `contains`, `fuzzy`) | Keeps suggestions interpretable and fast while handling minor typos. |
+| Intent reliability | Support-ambiguity reliability factor: `log1p(product_count)` with ambiguity penalty | Reduces overconfidence on sparse and multi-category clusters. |
+| Category decisioning | Weighted vote aggregation across lanes (lexical + optional semantic + optional product vote) | Blends evidence instead of relying on one hit. |
+| Semantic fallback | Dense vector kNN over keyword vectors and product vectors | Recovers meaning when lexical evidence is insufficient. |
+| Embedding model | `BAAI/bge-base-en-v1.5` (dimension `768`) | High-quality sentence embeddings for semantic retrieval. |
+| Confidence calibration | Runtime calibration + learned isotonic calibration model | Improves confidence quality for threshold decisions. |
+| Synonym handling | Data-driven synonym expansion from config file | Avoids hard-coded seed-only behavior and supports governance workflows. |
+
+### Steps We Have Taken
+
+1. Profiled indexed data quality (sparsity, ambiguity, outliers) to set safeguards.
+2. Implemented lexical suggestion lane with strong denoise and head-term guardrails.
+3. Implemented confidence-based mapping lane with explicit decision policy.
+4. Added semantic and product-vote fallbacks behind thresholds.
+5. Added Phase-3 canary, telemetry, and calibration controls.
+6. Added synonym governance scripts (validate, review, apply, rollback).
+7. Added observability and canary guard scripts for hold/promote/rollback decisions.
+8. Validated with regression artifacts:
+   - baseline (`100%`): `critical_checks=5`, `pair_checks=5`, `random_checks=40`, `failure_count=0`
+   - canary (`30%`): `critical_checks=5`, `pair_checks=5`, `random_checks=40`, `failure_count=0`
+
+## 1.3 Costing and Resource Allocation (AWS)
+
+This section explains both the numbers and the reasoning behind the selected cloud setup.
+
+The resource setup is designed to balance three goals:
+
+- predictable search and mapping latency,
+- controlled monthly spend for long-run operations,
+- clean horizontal scaling during stress periods.
+
+Pricing reference method:
+
+- Source: AWS public pricing offer file for `AmazonEC2`.
+- Endpoint: `https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/us-east-1/index.json`
+- Region used for snapshot: `us-east-1` (US East, N. Virginia).
+- Snapshot date: `2026-04-14`.
+- Currency: `USD`.
+- Monthly conversion: `730` hours.
+- Scope: EC2 on-demand Linux + EBS storage only (network/data transfer, NAT, ALB, snapshot growth, and other managed-service costs are excluded).
+
+#### Live Price Snapshot (Compute and Disk)
+
+| Resource | Unit Price | Monthly Equivalent |
+|---|---:|---:|
+| `m6i.large` (Linux, on-demand) | `$0.096/hour` | `$70.08/month` |
+| `m6i.xlarge` (Linux, on-demand) | `$0.192/hour` | `$140.16/month` |
+| `m6i.2xlarge` (Linux, on-demand) | `$0.384/hour` | `$280.32/month` |
+| `m6i.4xlarge` (Linux, on-demand) | `$0.768/hour` | `$560.64/month` |
+| `EBS gp3` storage | `$0.08/GB-month` | `$81.92/month` for `1024 GB` |
+| `EBS gp2` storage | `$0.10/GB-month` | `$102.40/month` for `1024 GB` |
+| `EBS io2` storage | `$0.125/GB-month` | `$128.00/month` for `1024 GB` |
+
+#### Recommended Long-Run Baseline Allocation
+
+| Layer | Allocation | Justification | Monthly Cost |
+|---|---|---|---:|
+| Elasticsearch data compute | `3 x m6i.2xlarge` | Three data nodes provide resilience and stable shard/query distribution under normal production load. | `$840.96` |
+| Elasticsearch data storage | `3 x EBS gp3 (1024 GB)` | gp3 provides predictable storage cost with balanced performance for index growth and read-heavy search patterns. | `$245.76` |
+| API serving tier | `2 x m6i.xlarge` | Two API nodes support concurrency and provide redundancy for service continuity. | `$280.32` |
+| ES coordinator/ingest | `1 x m6i.xlarge` | Isolates coordination and ingest overhead from API serving path to protect user-facing latency. | `$140.16` |
+| Batch/quality worker | `1 x m6i.large` | Keeps calibration, reporting, and reindex tasks separated from serving path. | `$70.08` |
+| Subtotal (compute + data disks) | N/A | Sum of baseline compute and storage resources. | `$1,577.28` |
+| Platform overhead reserve (monitoring, transfer, backups, contingency @ 20%) | N/A | Safety reserve for non-instance platform costs and operational variance. | `$315.46` |
+| Estimated monthly run cost | N/A | Baseline subtotal plus platform overhead reserve. | `$1,892.74` |
+
+#### Stress Handling Allocation (Scale-Out Add-On)
+
+When sustained traffic or latency pressure is detected, add:
+
+| Add-On | Why It Is Added |
+|---|---|
+| `+1 x m6i.2xlarge` (ES data node) | Absorbs query and indexing pressure while protecting search latency. |
+| `+1 x EBS gp3 (1024 GB)` (ES data disk) | Maintains data-node balance and avoids storage bottlenecks as data grows. |
+| `+2 x m6i.xlarge` (API horizontal scale) | Increases request concurrency and stabilizes API P95 latency. |
+| `+1 x m6i.xlarge` (background processing headroom) | Prevents background jobs from competing with real-time serving. |
+
+Cost impact:
+
+- Add-on subtotal (full month): `$782.72/month`
+- Add-on with 20% overhead: `$939.26/month`
+- Estimated baseline + sustained stress month: `$2,832.00/month`
+
+Operational scale triggers (recommended):
+
+- API scale-out: `CPU > 65%` for 5 minutes or mapping `P95 latency > 350 ms`.
+- ES scale-out: heap pressure sustained `> 70%` plus rising search queue depth.
+- Scale-in: hold for cooldown period after metrics return below target bands.
+
+## 1.4 Challenges and Solutions
+
+This section summarizes key delivery risks and how they were addressed.
+
+| Challenge | Impact | Solution Implemented | Status |
+|---|---|---|---|
+| Sparse and ambiguous keyword clusters | Wrong confidence inflation and unstable mapping | Added support-aware reliability formula with ambiguity penalty. | Resolved and active |
+| Noisy `head_terms` outliers and incomplete terms (for example `color t`) | Suggestion quality degradation | Added hard caps, per-document limits, evidence gates, and single-letter tail suppression. | Resolved and active |
+| Intent drift in multi-token queries | Mappings drifting to neighboring categories | Added canonical token normalization and anchor/order constraints. | Resolved and active |
+| Canary rollout previously altered relevance behavior | Inconsistent canary quality | Separated canary to rollout visibility and telemetry segmentation only; core scoring is deterministic. | Resolved and validated |
+| Learned confidence saturation on very small label sets | Overconfident decisions | Added balanced-label recommendation and calibration safety checks. | Mitigated; dataset expansion ongoing |
+| UTF-16 PowerShell regression artifacts in JSON logs | Tooling parse errors and report inconsistency | Added UTF-8/UTF-16 tolerant loading in reporting and guard flows. | Resolved and active |
 
 ## 2. Business Objective and Scope
 
@@ -614,7 +781,7 @@ UI behavior:
 
 ## 13. Conclusion
 
-The implemented search design is data-grounded, reliable under sparse and ambiguous cluster behavior, and submission-ready for stakeholders.
+The implemented search design is data-grounded, reliable under sparse and ambiguous cluster behavior, and submission-ready for business and engineering review.
 
 It provides:
 
@@ -627,7 +794,7 @@ It provides:
 
 ## 14. API Request and Response Examples
 
-This section provides practical examples for QA, product, and stakeholder walkthroughs.
+This section provides practical examples for QA, product, and business walkthroughs.
 
 ### 14.1 Suggestions API
 

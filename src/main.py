@@ -56,12 +56,18 @@ def _sync_mapping_knobs() -> None:
     mapping_service.PRODUCT_SHORT_VOTE_SHARE = PRODUCT_SHORT_VOTE_SHARE
 
 
-def map_query_to_categories(query_text: str, selected_suggestion: str | None = None, max_cards: int = 3):
+def map_query_to_categories(
+    query_text: str,
+    selected_suggestion: str | None = None,
+    max_cards: int = 3,
+    emit_telemetry: bool = True,
+):
     _sync_mapping_knobs()
     return mapping_service.map_query_to_categories(
         query_text=query_text,
         selected_suggestion=selected_suggestion,
         max_cards=max_cards,
+        emit_telemetry=emit_telemetry,
     )
 
 

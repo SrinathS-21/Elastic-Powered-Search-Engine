@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "kind": "isotonic_step",
+  "breakpoints": [
+    0.22,
+    0.2526,
+    0.3035,
+    0.3271,
+    0.91
+  ],
+  "values": [
+    0.5,
+    1.0,
+    1.0,
+    1.0,
+    1.0
+  ],
+  "sample_count": 8,
+  "positive_count": 6,
+  "trained_at": "2026-04-14T04:28:01.680019+00:00",
+  "source_labels": "config\\mapping_calibration_labels.sample.jsonl",
+  "metrics": {
+    "brier_raw": 0.409819,
+    "brier_calibrated": 0.125,
+    "ece_raw": 0.497188,
+    "ece_calibrated": 0.0
+  },
+  "class_balance": {
+    "positives": 6,
+    "negatives": 2
+  },
+  "warnings": [
+    "low_sample_count: recommended >= 50 labeled rows for stable calibration",
+    "class_imbalance: recommended >= 10 samples per class"
+  ],
+  "skipped_rows": 0
+}

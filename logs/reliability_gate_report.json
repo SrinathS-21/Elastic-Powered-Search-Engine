@@ -1,0 +1,155 @@
+{
+  "overall_status": "pass",
+  "failed_steps": [],
+  "failed_count": 0,
+  "rollout_action": "promote",
+  "artifacts": {
+    "baseline_regression": "D:\\pepagora\\Elastic Search Approach\\logs\\regression_gate_100.json",
+    "canary_regression": "D:\\pepagora\\Elastic Search Approach\\logs\\regression_gate_30.json",
+    "baseline_telemetry": "D:\\pepagora\\Elastic Search Approach\\logs\\mapping_telemetry_gate_100.jsonl",
+    "canary_telemetry": "D:\\pepagora\\Elastic Search Approach\\logs\\mapping_telemetry_gate_30.jsonl"
+  },
+  "steps": [
+    {
+      "name": "synonym_validate",
+      "success": true,
+      "exit_code": 0,
+      "command": "D:\\pepagora\\Elastic Search Approach\\.venv\\Scripts\\python.exe D:\\pepagora\\Elastic Search Approach\\scripts\\synonym_governance.py validate --synonyms config/synonyms.json --output full",
+      "payload": {
+        "command": "validate",
+        "synonyms": "config\\synonyms.json",
+        "count": 24,
+        "errors": [],
+        "warnings": [],
+        "error_count": 0,
+        "warning_count": 0
+      }
+    },
+    {
+      "name": "regression_baseline",
+      "success": true,
+      "exit_code": 0,
+      "command": "D:\\pepagora\\Elastic Search Approach\\.venv\\Scripts\\python.exe D:\\pepagora\\Elastic Search Approach\\scripts\\relevance_regression.py --random-samples 40 --output full",
+      "payload": {
+        "critical_checks": 5,
+        "pair_checks": 5,
+        "random_checks": 40,
+        "failure_count": 0,
+        "failures": []
+      }
+    },
+    {
+      "name": "regression_canary",
+      "success": true,
+      "exit_code": 0,
+      "command": "D:\\pepagora\\Elastic Search Approach\\.venv\\Scripts\\python.exe D:\\pepagora\\Elastic Search Approach\\scripts\\relevance_regression.py --random-samples 40 --output full",
+      "payload": {
+        "critical_checks": 5,
+        "pair_checks": 5,
+        "random_checks": 40,
+        "failure_count": 0,
+        "failures": []
+      }
+    },
+    {
+      "name": "observability_baseline",
+      "success": true,
+      "exit_code": 0,
+      "command": "D:\\pepagora\\Elastic Search Approach\\.venv\\Scripts\\python.exe D:\\pepagora\\Elastic Search Approach\\scripts\\observability_guard.py --telemetry D:\\pepagora\\Elastic Search Approach\\logs\\mapping_telemetry_gate_100.jsonl --expected-canary-percent 100 --output full",
+      "payload": {
+        "telemetry": "D:\\pepagora\\Elastic Search Approach\\logs\\mapping_telemetry_gate_100.jsonl",
+        "pass": true,
+        "failure_count": 0
+      }
+    },
+    {
+      "name": "observability_canary",
+      "success": true,
+      "exit_code": 0,
+      "command": "D:\\pepagora\\Elastic Search Approach\\.venv\\Scripts\\python.exe D:\\pepagora\\Elastic Search Approach\\scripts\\observability_guard.py --telemetry D:\\pepagora\\Elastic Search Approach\\logs\\mapping_telemetry_gate_30.jsonl --baseline D:\\pepagora\\Elastic Search Approach\\logs\\mapping_telemetry_gate_100.jsonl --expected-canary-percent 30 --output full",
+      "payload": {
+        "telemetry": "D:\\pepagora\\Elastic Search Approach\\logs\\mapping_telemetry_gate_30.jsonl",
+        "pass": true,
+        "failure_count": 0,
+        "baseline": "D:\\pepagora\\Elastic Search Approach\\logs\\mapping_telemetry_gate_100.jsonl"
+      }
+    },
+    {
+      "name": "canary_guard",
+      "success": true,
+      "exit_code": 0,
+      "command": "D:\\pepagora\\Elastic Search Approach\\.venv\\Scripts\\python.exe D:\\pepagora\\Elastic Search Approach\\scripts\\canary_guard.py --baseline-telemetry D:\\pepagora\\Elastic Search Approach\\logs\\mapping_telemetry_gate_100.jsonl --canary-telemetry D:\\pepagora\\Elastic Search Approach\\logs\\mapping_telemetry_gate_30.jsonl --baseline-regression D:\\pepagora\\Elastic Search Approach\\logs\\regression_gate_100.json --canary-regression D:\\pepagora\\Elastic Search Approach\\logs\\regression_gate_30.json",
+      "payload": {
+        "action": "promote",
+        "baseline_telemetry": "D:\\pepagora\\Elastic Search Approach\\logs\\mapping_telemetry_gate_100.jsonl",
+        "canary_telemetry": "D:\\pepagora\\Elastic Search Approach\\logs\\mapping_telemetry_gate_30.jsonl",
+        "canary_metrics": {
+          "rows": 100.0,
+          "auto_map_rate": 0.5,
+          "confirm_rate": 0.5,
+          "options_rate": 0.0,
+          "low_confidence_rate": 0.0,
+          "low_margin_rate": 0.5,
+          "product_vote_dominant_rate": 0.0,
+          "confidence_p50": 1.0
+        },
+        "failed_checks": 0
+      }
+    },
+    {
+      "name": "user_situation_validation",
+      "success": true,
+      "exit_code": 0,
+      "command": "D:\\pepagora\\Elastic Search Approach\\.venv\\Scripts\\python.exe D:\\pepagora\\Elastic Search Approach\\scripts\\user_situation_validation.py --output full",
+      "payload": {
+        "cases": 8,
+        "critical_failures": 0,
+        "major_failures": 0,
+        "minor_failures": 0,
+        "overall_status": "pass"
+      }
+    },
+    {
+      "name": "continuous_quality_report",
+      "success": true,
+      "exit_code": 0,
+      "command": "D:\\pepagora\\Elastic Search Approach\\.venv\\Scripts\\python.exe D:\\pepagora\\Elastic Search Approach\\scripts\\continuous_quality_report.py --telemetry D:\\pepagora\\Elastic Search Approach\\logs\\mapping_telemetry_gate_100.jsonl --regression D:\\pepagora\\Elastic Search Approach\\logs\\regression_gate_100.json --calibration-model config/mapping_confidence_calibration.json --output full",
+      "payload": {
+        "telemetry_file": "D:\\pepagora\\Elastic Search Approach\\logs\\mapping_telemetry_gate_100.jsonl",
+        "telemetry": {
+          "rows": 100,
+          "auto_map_rate": 0.5,
+          "confirm_rate": 0.5,
+          "options_rate": 0.0,
+          "low_confidence_rate": 0.0,
+          "low_margin_rate": 0.5,
+          "product_vote_dominant_rate": 0.0
+        },
+        "regression_failure_count": 0,
+        "calibration": {
+          "exists": true,
+          "sample_count": 8,
+          "positive_count": 6,
+          "negative_count": 2,
+          "warnings": [
+            "calibration_class_balance_weak",
+            "calibration_samples_below_50",
+            "class_imbalance: recommended >= 10 samples per class",
+            "low_sample_count: recommended >= 50 labeled rows for stable calibration"
+          ],
+          "age_days": 0.04,
+          "metrics": {
+            "brier_raw": 0.409819,
+            "brier_calibrated": 0.125,
+            "ece_raw": 0.497188,
+            "ece_calibrated": 0.0
+          }
+        },
+        "next_actions": [
+          "expand_calibration_labels_and_retrain_model"
+        ],
+        "overall_status": "attention_required"
+      }
+    }
+  ]
+}

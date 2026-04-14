@@ -7,16 +7,18 @@ from fastapi import APIRouter, Query
 from fastapi.responses import FileResponse
 
 try:
-    from ..core.config import INDEX_NAME, KEYWORD_INDEX, SUPPLIER_INDEX, UI_DIR
+    from ..core.config import INDEX_NAME, KEYWORD_INDEX, UI_DIR
     from ..services.internal.common import index_doc_count, index_exists, sample_hierarchy_cards
     from ..services.mapping import current_thresholds, map_query_to_categories
     from ..services.internal.suggestions import fetch_keyword_suggestions
+    from ..services.suppliers import supplier_doc_count, supplier_enrichment_enabled, supplier_index_exists
     from ..services.synonyms import expand_synonyms
 except ImportError:
-    from core.config import INDEX_NAME, KEYWORD_INDEX, SUPPLIER_INDEX, UI_DIR
+    from core.config import INDEX_NAME, KEYWORD_INDEX, UI_DIR
     from services.internal.common import index_doc_count, index_exists, sample_hierarchy_cards
     from services.mapping import current_thresholds, map_query_to_categories
     from services.internal.suggestions import fetch_keyword_suggestions
+    from services.suppliers import supplier_doc_count, supplier_enrichment_enabled, supplier_index_exists
     from services.synonyms import expand_synonyms
 
 router = APIRouter()
@@ -40,14 +42,18 @@ def ui_data_snapshot():
     try:
         products_exists = index_exists(INDEX_NAME)
         keywords_exists = index_exists(KEYWORD_INDEX)
-        suppliers_exists = index_exists(SUPPLIER_INDEX)
-        products = index_doc_count(INDEX_NAME)
-        keywords = index_doc_count(KEYWORD_INDEX)
-        suppliers = index_doc_count(SUPPLIER_INDEX)
+        products = index_doc_count(INDEX_NAME, known_exists=products_exists)
+        keywords = index_doc_count(KEYWORD_INDEX, known_exists=keywords_exists)
+
+        suppliers_enabled = supplier_enrichment_enabled()
+        suppliers_exists = supplier_index_exists() if suppliers_enabled else False
+        suppliers = supplier_doc_count() if suppliers_exists else 0
+
         return {
             "products": products,
             "keywords": keywords,
             "suppliers": suppliers,
+            "suppliers_feature_enabled": suppliers_enabled,
             "products_index_exists": products_exists,
             "keywords_index_exists": keywords_exists,
             "suppliers_index_exists": suppliers_exists,
@@ -59,6 +65,7 @@ def ui_data_snapshot():
             "products": 0,
             "keywords": 0,
             "suppliers": 0,
+            "suppliers_feature_enabled": False,
             "products_index_exists": False,
             "keywords_index_exists": False,
             "suppliers_index_exists": False,
@@ -102,6 +109,7 @@ def ui_hierarchy_mapping(
         query_text=keyword,
         selected_suggestion=keyword if selected_term else None,
         max_cards=max_cards,
+        emit_telemetry=False,
     )
     cards = mapping.get("cards") or sample_hierarchy_cards(keyword, max_cards=max_cards)
     return {
@@ -121,6 +129,8 @@ def ui_hierarchy_mapping(
         "lanes_used": mapping.get("lanes_used", []),
         "semantic_used": mapping.get("semantic_used", False),
         "product_fallback_used": mapping.get("product_fallback_used", False),
+        "phase3_active": mapping.get("phase3_active", False),
+        "alerts": mapping.get("alerts", []),
         "cards": cards,
         "matched_docs": mapping.get("matched_clusters", 0),
         "latency_ms": round((time.perf_counter() - start) * 1000, 1),
@@ -139,6 +149,7 @@ def ui_map_category(
         query_text=q,
         selected_suggestion=selected,
         max_cards=max_cards,
+        emit_telemetry=False,
     )
 
     cards = mapping.get("cards") or sample_hierarchy_cards(selected or q, max_cards=max_cards)
@@ -160,6 +171,8 @@ def ui_map_category(
         "lanes_used": mapping.get("lanes_used", []),
         "semantic_used": mapping.get("semantic_used", False),
         "product_fallback_used": mapping.get("product_fallback_used", False),
+        "phase3_active": mapping.get("phase3_active", False),
+        "alerts": mapping.get("alerts", []),
         "thresholds": current_thresholds(),
         "latency_ms": round((time.perf_counter() - start) * 1000, 1),
     }

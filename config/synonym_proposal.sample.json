@@ -1,0 +1,12 @@
+{
+  "add": {
+    "vfd": "variable frequency drive",
+    "rccb": "residual current circuit breaker"
+  },
+  "replace": {
+    "hvac": "heating ventilation and air conditioning"
+  },
+  "remove": [
+    "cfl"
+  ]
+}

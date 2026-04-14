@@ -1,0 +1,7 @@
+{
+  "critical_checks": 5,
+  "pair_checks": 5,
+  "random_checks": 40,
+  "failure_count": 0,
+  "failures": []
+}

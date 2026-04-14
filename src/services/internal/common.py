@@ -42,8 +42,9 @@ def index_exists(index_name: str) -> bool:
         return False
 
 
-def index_doc_count(index_name: str) -> int:
-    if not index_exists(index_name):
+def index_doc_count(index_name: str, known_exists: bool | None = None) -> int:
+    exists = known_exists if known_exists is not None else index_exists(index_name)
+    if not exists:
         return 0
     try:
         return int(es.count(index=index_name)["count"])

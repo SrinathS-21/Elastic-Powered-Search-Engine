@@ -17,6 +17,7 @@ try:
     from .common import as_text, trim_terms
     from .query_text import (
         build_query_context,
+        canonical_token_list,
         has_strong_term_evidence,
         is_noisy_suggestion_term,
         suggestion_rank_features,
@@ -37,11 +38,39 @@ except ImportError:
     from services.internal.common import as_text, trim_terms
     from services.internal.query_text import (
         build_query_context,
+        canonical_token_list,
         has_strong_term_evidence,
         is_noisy_suggestion_term,
         suggestion_rank_features,
         token_list,
     )
+
+
+DEMOGRAPHIC_TOKENS = {
+    "women", "woman", "ladies", "lady", "men", "man", "male", "female",
+    "boys", "boy", "girls", "girl", "kids", "kid", "children", "child", "unisex",
+}
+
+
+def _suggestion_anchor_requirements(context: dict[str, Any]) -> tuple[set[str], set[str], bool]:
+    canonical_intent = [
+        as_text(token).lower().strip()
+        for token in (context.get("canonical_intent_tokens") or [])
+        if as_text(token).strip()
+    ]
+    anchor_tokens = [
+        as_text(token).lower().strip()
+        for token in (context.get("anchor_tokens") or [])
+        if as_text(token).strip()
+    ]
+    canonical_anchor_tokens = canonical_token_list(" ".join(anchor_tokens))
+    if not canonical_anchor_tokens:
+        canonical_anchor_tokens = canonical_intent[-2:] if len(canonical_intent) >= 2 else canonical_intent[:]
+
+    required_domain = {token for token in canonical_anchor_tokens if token and token not in DEMOGRAPHIC_TOKENS}
+    required_demographic = {token for token in canonical_anchor_tokens if token in DEMOGRAPHIC_TOKENS}
+    strict_mode = bool(len(canonical_intent) >= 3 and required_domain)
+    return required_domain, required_demographic, strict_mode
 
 
 def _merge_suggestion_candidate(
@@ -118,7 +147,7 @@ def fetch_keyword_suggestions(query: str, limit: int = 12) -> list[str]:
     ranked_query_tokens = context["intent_tokens"]
     significant_query_tokens = context["intent_tokens"]
     query_ends_with_noise_token = context["ends_with_noise"]
-    anchor_token = context["anchor_tokens"][-1] if len(context["anchor_tokens"]) >= 2 else ""
+    required_domain_anchors, required_demographic_anchors, strict_anchor_mode = _suggestion_anchor_requirements(context)
 
     ranked: dict[str, dict] = {}
 
@@ -175,6 +204,8 @@ def fetch_keyword_suggestions(query: str, limit: int = 12) -> list[str]:
 
                 for candidate in trim_terms(source.get("variant_terms") or [], VARIANT_TERMS_PER_DOC_LIMIT):
                     if not has_strong_term_evidence(candidate, normalized_query, ranked_query_tokens):
+                        continue
+                    if suggestion_rank_features(candidate, normalized_query)["stage"] > 4:
                         continue
                     _merge_suggestion_candidate(
                         ranked,
@@ -305,8 +336,18 @@ def fetch_keyword_suggestions(query: str, limit: int = 12) -> list[str]:
         if prefix_filtered:
             ordered = prefix_filtered
 
-    if anchor_token:
-        anchor_filtered = [item for item in ordered if anchor_token in token_list(item["value"])]
+    if required_domain_anchors:
+        anchor_filtered: list[dict] = []
+        for item in ordered:
+            candidate_tokens = set(canonical_token_list(item["value"]))
+            if not candidate_tokens:
+                continue
+            if not (required_domain_anchors & candidate_tokens):
+                continue
+            if strict_anchor_mode and required_demographic_anchors and not (required_demographic_anchors & candidate_tokens):
+                continue
+            anchor_filtered.append(item)
+
         if len(anchor_filtered) >= max(4, limit // 2):
             ordered = anchor_filtered
 
