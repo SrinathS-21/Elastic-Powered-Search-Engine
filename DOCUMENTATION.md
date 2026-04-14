@@ -1,6 +1,28 @@
-# Pepagora Search Functionality Approach (Submission Document)
+# Pepagora Search Functionality Approach (Updated Submission Document)
 
 Version date: 2026-04-14
+
+## Document Status
+
+- Status: Updated and current.
+- Updated on: 2026-04-14.
+- Primary decision document: `DOCUMENTATION.md`.
+- Implementation tracker (operational details): `IMPLEMENTATION_TRACKER.md`.
+
+## What Was Updated in This Revision
+
+1. Reorganized document flow for easier reading:
+- Executive summary -> objective/scope -> use case -> approach -> cost -> challenges -> technical deep dive.
+
+2. Kept the document business-focused:
+- Removed tracker-level operational details from this file.
+- Preserved implementation tracker in separate file.
+
+3. Updated challenge statements to reflect real issues faced:
+- Kept only practical relevance/quality issues from implementation and rollout.
+
+4. Kept AWS-only costing and scaling plan:
+- Baseline and stress allocation with clear justification and budget envelope.
 
 ## 1. Executive Summary
 
@@ -13,11 +35,26 @@ The design is intentionally:
 - Fallback-enabled (semantic cluster and product vote) only when confidence is weak.
 - Audit-friendly, with explicit confidence, decision, margin, lanes used, and evidence in API responses.
 
-## 1.1 Use Case
+Decision supported by this document:
+
+- Approve production use of the lexical-first, reliability-aware mapping design with controlled fallback lanes and AWS baseline resource allocation.
+
+## 1.1 Business Objective and Scope
+
+This section provides the formal objective and scope statement for governance and sign-off.
+
+| Area | Definition |
+|---|---|
+| Primary objective | Convert user intent text (typed query or selected suggestion) into reliable category mapping. |
+| Secondary objective | Provide high-quality autosuggestions with low noise and low latency. |
+| In scope | Intent normalization, suggestion quality controls, confidence-based category mapping, conditional semantic fallback, product-vote fallback, telemetry, and operational guardrails. |
+| Out of scope | Product ranking as the primary business output for this decision stage. |
+| Current quality status | Latest baseline and canary validation set shows `failure_count=0` across critical, pair, and random checks. |
+
+## 1.2 Use Case
 
 This section explains what user problem is being solved and what success looks like in business terms.
 
-Note: implementation tracker details are maintained separately in `IMPLEMENTATION_TRACKER.md`.
 
 ### Use Case Summary
 
@@ -49,11 +86,11 @@ Expected business outcomes:
 - Stable latency at peak hours.
 - Better top-1 or top-3 category acceptance in validation checks.
 
-## 1.2 Approach
+## 1.3 Approach
 
 This section explains why the architecture is designed this way and how it was implemented.
 
-### Approach We Have Come Up With
+### Selected Approach
 
 The implemented approach is intentionally multi-lane and reliability-aware:
 
@@ -76,17 +113,24 @@ The implemented approach is intentionally multi-lane and reliability-aware:
 
 ### Algorithms/Models We Used
 
-| Area | Algorithm / Model | Why It Is Used |
-|---|---|---|
-| Suggestion ranking | Multi-stage lexical ranking (`exact`, `prefix`, `ordered_phrase`, `ordered_tokens`, `contains`, `fuzzy`) | Keeps suggestions interpretable and fast while handling minor typos. |
-| Intent reliability | Support-ambiguity reliability factor: `log1p(product_count)` with ambiguity penalty | Reduces overconfidence on sparse and multi-category clusters. |
-| Category decisioning | Weighted vote aggregation across lanes (lexical + optional semantic + optional product vote) | Blends evidence instead of relying on one hit. |
-| Semantic fallback | Dense vector kNN over keyword vectors and product vectors | Recovers meaning when lexical evidence is insufficient. |
-| Embedding model | `BAAI/bge-base-en-v1.5` (dimension `768`) | High-quality sentence embeddings for semantic retrieval. |
-| Confidence calibration | Runtime calibration + learned isotonic calibration model | Improves confidence quality for threshold decisions. |
-| Synonym handling | Data-driven synonym expansion from config file | Avoids hard-coded seed-only behavior and supports governance workflows. |
+| Component | Core Method / Model | Input Signals | Output Produced | Key Runtime Controls |
+|---|---|---|---|---|
+| Suggestion ranking | Multi-stage lexical ranking (`exact`, `prefix`, `ordered_phrase`, `ordered_tokens`, `contains`, `fuzzy`) | query text, canonical tokens, keyword fields (`keyword_name`, `variant_terms`, guarded `long_tail/head_terms`) | ranked suggestion list | `HEAD_TERMS_HARD_CAP`, per-doc term limits, stage gating (`<=4`) |
+| Intent reliability scoring | Support-ambiguity reliability factor (`log1p(product_count)` + ambiguity penalty) | `product_count`, `category_count` | reliability-weighted vote contribution | `KEYWORD_P95_PRODUCT_COUNT`, `RELIABILITY_BETA` |
+| Category decisioning | Weighted vote aggregation across lanes | lexical score, match signal, semantic vote, product vote | `top_category`, alternatives, confidence, margin | `AUTO_MAP_CONFIDENCE`, `AUTO_MAP_MARGIN`, `CONFIRM_MAP_CONFIDENCE` |
+| Semantic retrieval lane | Dense vector kNN on cluster/product vectors | query embedding (`BGE`), index vectors (`keyword_vector_*`, `product_vector_*`) | semantic candidates for fallback/rerank | `SEMANTIC_CLUSTER_WEIGHT`, fallback triggers |
+| Embedding model | `BAAI/bge-base-en-v1.5` (`768`-dim, normalized embeddings) | query/document text | vector representation for semantic matching | cache behavior (`lru_cache`), batching and device config |
+| Confidence calibration | Runtime + learned isotonic calibration | raw confidence from vote scores, optional label-trained model | calibrated confidence for safer decisions | calibration toggles, model file validity checks |
+| Synonym expansion | Data-driven synonym dictionary | configured synonym file + query text | expanded lexical query variants | governance scripts (`validate`, `review`, `apply`, `rollback`) |
 
-### Steps We Have Taken
+Algorithm quality checks already covered in this implementation:
+
+- deterministic ranking order for repeated inputs,
+- guardrails against noisy head-term dominance,
+- strict confidence gating before auto decisions,
+- canary safety to prevent ranking behavior divergence.
+
+### Implementation Steps Completed
 
 1. Profiled indexed data quality (sparsity, ambiguity, outliers) to set safeguards.
 2. Implemented lexical suggestion lane with strong denoise and head-term guardrails.
@@ -99,7 +143,7 @@ The implemented approach is intentionally multi-lane and reliability-aware:
    - baseline (`100%`): `critical_checks=5`, `pair_checks=5`, `random_checks=40`, `failure_count=0`
    - canary (`30%`): `critical_checks=5`, `pair_checks=5`, `random_checks=40`, `failure_count=0`
 
-## 1.3 Costing and Resource Allocation (AWS)
+## 1.4 Costing and Resource Allocation (AWS)
 
 This section explains both the numbers and the reasoning behind the selected cloud setup.
 
@@ -108,6 +152,13 @@ The resource setup is designed to balance three goals:
 - predictable search and mapping latency,
 - controlled monthly spend for long-run operations,
 - clean horizontal scaling during stress periods.
+
+Budget envelope (monthly):
+
+- Baseline run (right-sized): `$1,011.46`
+- Optimal run (baseline + API scale-out): `$1,179.65`
+- Sustained stress run (standard scale-out): `$1,376.64`
+- Sustained stress run (with dedicated BGE inference tier): `$1,713.02`
 
 Pricing reference method:
 
@@ -119,6 +170,52 @@ Pricing reference method:
 - Monthly conversion: `730` hours.
 - Scope: EC2 on-demand Linux + EBS storage only (network/data transfer, NAT, ALB, snapshot growth, and other managed-service costs are excluded).
 
+### BGE Hosting Requirement (Right-Sized)
+
+Model in use:
+
+- `BAAI/bge-base-en-v1.5` (`768`-dimension embeddings), loaded through `sentence-transformers`.
+
+What this means operationally:
+
+- BGE embedding generation is used in semantic/hybrid paths and mapping fallback logic, not on every pure lexical request.
+- Query embedding has an in-process cache (`lru_cache`) that reduces repeated work for frequent terms.
+
+Recommended hosting now (no over-engineering):
+
+- Keep BGE inference inside the existing API tier (`2 x m6i.xlarge`) for current scale.
+- Do not introduce a dedicated GPU tier at this stage.
+- Keep one batch/quality worker (`1 x m6i.large`) for non-serving tasks.
+
+When to split BGE into a dedicated inference tier:
+
+- If embedding latency (`p95`) remains high under sustained load, or
+- If API CPU pressure remains high after standard API horizontal scale-out.
+
+Dedicated BGE tier (only when needed):
+
+- Start with `1 x m6i.2xlarge`, then scale to `2` instances only if sustained demand requires it.
+
+### Elasticsearch Hosting Requirement (Right-Sized)
+
+Sizing basis (current data profile):
+
+- Product index documents: `100,000`
+- Keyword cluster index documents: `511,124`
+- Dense vector search enabled for semantic and fallback behavior.
+
+Recommended baseline cluster (production-safe, not over-engineered):
+
+- `3 x m6i.xlarge` Elasticsearch nodes
+- `3 x EBS gp3 (300 GB)` data volumes
+- Roles combined (data + cluster management) to avoid unnecessary coordinator-only nodes at this stage
+
+Why this is right-sized:
+
+- Three nodes provide high availability and shard balance.
+- `m6i.xlarge` provides enough memory/CPU headroom for current document counts and vector workloads.
+- `gp3 300 GB` per node keeps storage cost controlled while maintaining sufficient growth headroom.
+
 #### Live Price Snapshot (Compute and Disk)
 
 | Resource | Unit Price | Monthly Equivalent |
@@ -127,22 +224,57 @@ Pricing reference method:
 | `m6i.xlarge` (Linux, on-demand) | `$0.192/hour` | `$140.16/month` |
 | `m6i.2xlarge` (Linux, on-demand) | `$0.384/hour` | `$280.32/month` |
 | `m6i.4xlarge` (Linux, on-demand) | `$0.768/hour` | `$560.64/month` |
-| `EBS gp3` storage | `$0.08/GB-month` | `$81.92/month` for `1024 GB` |
-| `EBS gp2` storage | `$0.10/GB-month` | `$102.40/month` for `1024 GB` |
-| `EBS io2` storage | `$0.125/GB-month` | `$128.00/month` for `1024 GB` |
+| `EBS gp3` storage | `$0.08/GB-month` | `$24.00/month` for `300 GB` |
+| `EBS gp2` storage | `$0.10/GB-month` | `$30.00/month` for `300 GB` |
+| `EBS io2` storage | `$0.125/GB-month` | `$37.50/month` for `300 GB` |
 
-#### Recommended Long-Run Baseline Allocation
+### Concurrency and Capacity Scenarios (Best, Optimal, Worst)
+
+Purpose of this section:
+
+- to communicate required cloud allocation to stakeholders first, then the concurrency that allocation can support,
+- to make capacity planning resource-first (concurrency is a derived output, not an independent input),
+- to support go-live scaling decisions with a clear cost-to-capacity mapping,
+- not to claim final SLA certification until dedicated load testing is completed.
+
+Planning method:
+
+- Resource allocation is the primary input.
+- Supported request rate is limited by the bottleneck layer in the allocated stack (API, Elasticsearch, or BGE when enabled).
+- `RPS_capacity = min(API capacity, Elasticsearch capacity, BGE capacity when enabled)`
+- `Estimated concurrency = ceil(RPS_capacity x P95 latency in seconds)`
+- This means concurrency is derived from provisioned resources; it is not an independent assumption.
+- Observed telemetry from controlled 100-row runs (`1.63-3.74 RPS`, median `2.34 RPS`) is used as baseline reference; scenario envelopes below are resource-scaled planning values.
+- Final SLA lock still requires dedicated load testing.
+
+| Scenario | Required Cloud Allocation | Capacity Driver | Supported RPS Envelope | P95 Target | Estimated In-Flight Concurrency | Monthly Cost (Live) |
+|---|---|---|---:|---:|---:|---:|
+| Best | `ES: 3 x m6i.xlarge + 3 x gp3(300 GB)`, `API: 2 x m6i.xlarge`, `Worker: 1 x m6i.large`, BGE in API tier | Baseline API serving capacity with lexical-dominant traffic | `5` | `300 ms` | `2` | `$1,011.46` |
+| Optimal | Best + `1 x API m6i.xlarge` (total API = `3`) | Additional API parallelism for mixed lexical + semantic traffic | `12` | `350 ms` | `5` | `$1,179.65` |
+| Worst (standard) | Optimal + `1 x ES m6i.xlarge` + `1 x gp3(300 GB)` (total ES data nodes = `4`) | Elasticsearch-side headroom for sustained semantic fallback and higher fan-out | `16` | `500 ms` | `8` | `$1,376.64` |
+| Worst (heavy embedding) | Worst (standard) + dedicated BGE tier `1 x m6i.2xlarge` | Embedding isolation from API serving under sustained semantic pressure | `22` | `650 ms` | `15` | `$1,713.02` |
+
+Relative pricing impact from live rates:
+
+- Optimal vs Best: `+$168.19/month`
+- Worst (standard) vs Best: `+$365.18/month`
+- Worst (heavy embedding) vs Worst (standard): `+$336.38/month`
+
+#### Recommended Long-Run Baseline Allocation (Right-Sized)
 
 | Layer | Allocation | Justification | Monthly Cost |
 |---|---|---|---:|
-| Elasticsearch data compute | `3 x m6i.2xlarge` | Three data nodes provide resilience and stable shard/query distribution under normal production load. | `$840.96` |
-| Elasticsearch data storage | `3 x EBS gp3 (1024 GB)` | gp3 provides predictable storage cost with balanced performance for index growth and read-heavy search patterns. | `$245.76` |
-| API serving tier | `2 x m6i.xlarge` | Two API nodes support concurrency and provide redundancy for service continuity. | `$280.32` |
-| ES coordinator/ingest | `1 x m6i.xlarge` | Isolates coordination and ingest overhead from API serving path to protect user-facing latency. | `$140.16` |
+| Elasticsearch data compute | `3 x m6i.xlarge` | Three-node cluster for availability and shard balance without oversized compute. | `$420.48` |
+| Elasticsearch data storage | `3 x EBS gp3 (300 GB)` | Balanced storage for current index size plus growth headroom. | `$72.00` |
+| API serving tier (includes BGE inference) | `2 x m6i.xlarge` | Keeps request serving and current embedding workload simple and cost-efficient. | `$280.32` |
 | Batch/quality worker | `1 x m6i.large` | Keeps calibration, reporting, and reindex tasks separated from serving path. | `$70.08` |
-| Subtotal (compute + data disks) | N/A | Sum of baseline compute and storage resources. | `$1,577.28` |
-| Platform overhead reserve (monitoring, transfer, backups, contingency @ 20%) | N/A | Safety reserve for non-instance platform costs and operational variance. | `$315.46` |
-| Estimated monthly run cost | N/A | Baseline subtotal plus platform overhead reserve. | `$1,892.74` |
+| Subtotal (compute + data disks) | N/A | Sum of baseline compute and storage resources. | `$842.88` |
+| Platform overhead reserve (monitoring, transfer, backups, contingency @ 20%) | N/A | Safety reserve for non-instance platform costs and operational variance. | `$168.58` |
+| Estimated monthly run cost | N/A | Baseline subtotal plus platform overhead reserve. | `$1,011.46` |
+
+Note:
+
+- Add a dedicated coordinator/ingest node later only if telemetry shows clear contention between ingestion and user-facing query latency.
 
 #### Stress Handling Allocation (Scale-Out Add-On)
 
@@ -150,59 +282,62 @@ When sustained traffic or latency pressure is detected, add:
 
 | Add-On | Why It Is Added |
 |---|---|
-| `+1 x m6i.2xlarge` (ES data node) | Absorbs query and indexing pressure while protecting search latency. |
-| `+1 x EBS gp3 (1024 GB)` (ES data disk) | Maintains data-node balance and avoids storage bottlenecks as data grows. |
-| `+2 x m6i.xlarge` (API horizontal scale) | Increases request concurrency and stabilizes API P95 latency. |
-| `+1 x m6i.xlarge` (background processing headroom) | Prevents background jobs from competing with real-time serving. |
+| `+1 x m6i.xlarge` (ES data node) | Adds search/index capacity while preserving cluster balance. |
+| `+1 x EBS gp3 (300 GB)` (ES data disk) | Keeps storage and shard placement balanced with the additional node. |
+| `+1 x m6i.xlarge` (API horizontal scale) | Raises serving concurrency for higher request volume. |
+| `+1 x m6i.2xlarge` (dedicated BGE inference tier, optional) | Added only if embedding latency remains high after API scale-out. |
 
 Cost impact:
 
-- Add-on subtotal (full month): `$782.72/month`
-- Add-on with 20% overhead: `$939.26/month`
-- Estimated baseline + sustained stress month: `$2,832.00/month`
+- Standard add-on subtotal (without dedicated BGE tier): `$304.32/month`
+- Standard add-on with 20% overhead: `$365.18/month`
+- Baseline + standard stress run: `$1,376.64/month`
+- Optional dedicated BGE tier add-on: `+$336.38/month` (including 20% overhead)
+- Baseline + stress run with dedicated BGE tier: `$1,713.02/month`
 
 Operational scale triggers (recommended):
 
 - API scale-out: `CPU > 65%` for 5 minutes or mapping `P95 latency > 350 ms`.
 - ES scale-out: heap pressure sustained `> 70%` plus rising search queue depth.
+- BGE dedicated tier activation: embedding `P95` remains high even after API horizontal scale-out.
 - Scale-in: hold for cooldown period after metrics return below target bands.
 
-## 1.4 Challenges and Solutions
+## 1.5 Challenges and Solutions
 
-This section summarizes key delivery risks and how they were addressed.
+This section summarizes real issues we faced, why they mattered, and how we resolved them.
 
-| Challenge | Impact | Solution Implemented | Status |
+| What We Faced | Why It Was a Problem | What We Changed | Current Result |
 |---|---|---|---|
-| Sparse and ambiguous keyword clusters | Wrong confidence inflation and unstable mapping | Added support-aware reliability formula with ambiguity penalty. | Resolved and active |
-| Noisy `head_terms` outliers and incomplete terms (for example `color t`) | Suggestion quality degradation | Added hard caps, per-document limits, evidence gates, and single-letter tail suppression. | Resolved and active |
-| Intent drift in multi-token queries | Mappings drifting to neighboring categories | Added canonical token normalization and anchor/order constraints. | Resolved and active |
-| Canary rollout previously altered relevance behavior | Inconsistent canary quality | Separated canary to rollout visibility and telemetry segmentation only; core scoring is deterministic. | Resolved and validated |
-| Learned confidence saturation on very small label sets | Overconfident decisions | Added balanced-label recommendation and calibration safety checks. | Mitigated; dataset expansion ongoing |
-| UTF-16 PowerShell regression artifacts in JSON logs | Tooling parse errors and report inconsistency | Added UTF-8/UTF-16 tolerant loading in reporting and guard flows. | Resolved and active |
+| Sparse and ambiguous keyword clusters | Same query could appear confident even when evidence was weak or split across categories. | Added reliability weighting using support (`product_count`) and ambiguity (`category_count`) penalties. | Mapping confidence is more realistic and wrong auto-maps are reduced. |
+| Noisy head terms and truncated terms (for example `color t`) | Low-quality suggestions reached users and reduced trust in autocomplete. | Added head-term hard caps, per-document limits, evidence gates, and one-letter-tail suppression. | Suggestion list quality is stable and noisy partial terms are filtered out. |
+| Intent drift in multi-token queries | Queries could drift into nearby but incorrect categories. | Added canonical token normalization and anchor/order constraints for stronger intent preservation. | Results stay aligned to the original user intent more consistently. |
+| Canary rollout initially affected relevance behavior | Canary traffic produced different ranking behavior instead of only rollout visibility differences. | Decoupled canary from core scoring; canary now controls visibility and telemetry segmentation only. | Baseline and canary runs now show consistent relevance behavior. |
+| Confidence model saturation with very small label set | Learned confidence could become overconfident and less reliable for decisions. | Added calibration validation rules and guidance for balanced label data before model reliance. | Confidence calibration is controlled; label set expansion is tracked as ongoing work. |
 
-## 2. Business Objective and Scope
+### Potential Future Challenges (Data-Driven Hypothetical Scenarios)
 
-Primary objective:
+| Potential Scenario | Early Signal to Watch | Potential Impact | Recommended Preventive Action |
+|---|---|---|---|
+| Long-tail query growth with sparse support | Rising share of queries mapped from clusters with `product_count <= 1` | More `options/no_match` decisions and lower confidence stability | Expand long-tail labels and controlled synonym proposals; prioritize weak-intent query mining |
+| Synonym over-expansion conflicts | Higher false positives after synonym updates | Suggestion drift and off-intent category mapping | Enforce governance review gates and run regression before synonym promotion |
+| Category taxonomy updates upstream | New/renamed categories without synchronized keyword mappings | Incorrect breadcrumbs and stale mapping behavior | Add change-detection checks and reindex/relabel runbook for taxonomy updates |
+| Semantic traffic spike during campaigns | Higher semantic fallback activation rate with rising embedding latency | API latency pressure and inconsistent user experience | Trigger API scale-out first, then enable dedicated BGE tier when thresholds are exceeded |
+| Confidence drift from changing query mix | Margin collapse and rising low-confidence alerts over time | Unstable decision quality and higher manual confirmation load | Monthly calibration refresh with balanced labels and threshold revalidation |
+| Data freshness lag in indexing pipelines | Delay between source catalog updates and searchable index state | Missing or outdated suggestions and categories | Track ingestion lag SLO and prioritize backfill catch-up automation |
 
-- Convert user intent text (typed query or selected suggestion) into reliable category mapping.
+### Suggested Validation Tests to Add for These Scenarios
 
-Secondary objective:
+1. Long-tail stability pack: add a curated weak-support query set and run before each release.
+2. Synonym safety gate: run synonym governance review + full relevance regression before apply.
+3. Campaign-load simulation: execute burst load profile with high semantic mix and verify P95 + fallback rates.
+4. Calibration drift check: monitor confidence and margin distributions weekly against baseline windows.
+5. Freshness check: validate index lag and sample correctness after each major ingest/backfill.
 
-- Provide high-quality autosuggestions with low noise and low latency.
-
-Scope for this flow:
-
-- Intent to category mapping.
-
-Out of scope for this decision stage:
-
-- Product ranking as the primary output.
-
-## 3. Data Used to Establish Search
+## 2. Data Used to Establish Search
 
 This section clearly states what data is used and how each dataset contributes to search.
 
-### 3.1 Upstream Source Data (Ingestion Inputs)
+### 2.1 Upstream Source Data (Ingestion Inputs)
 
 The Elasticsearch indices are built from MongoDB collections:
 
@@ -214,7 +349,7 @@ The Elasticsearch indices are built from MongoDB collections:
 | `subcategories` | Sub-category label resolution during indexing |
 | `productcategories` | Product-category label resolution during indexing |
 
-### 3.2 Runtime Search Indices and Key Fields
+### 2.2 Runtime Search Indices and Key Fields
 
 #### A. Keyword Cluster Index (`pepagora_keyword_cluster`)
 
@@ -256,7 +391,7 @@ Key fields consumed at runtime:
 | `subCategory_name` | keyword | Breadcrumb rendering |
 | `productCategory_name` | keyword | Breadcrumb rendering |
 
-### 3.3 Data Quality Observations Used in Design
+### 2.3 Data Quality Observations Used in Design
 
 From indexed data profiling:
 
@@ -270,7 +405,7 @@ Design impact:
 - Support smoothing and ambiguity penalty are mandatory.
 - Head-term usage is guarded and capped.
 
-### 3.4 Current Indexed Data Profile (Design Baseline)
+### 2.4 Current Indexed Data Profile (Design Baseline)
 
 The following profile numbers were used to define safeguards and thresholds:
 
@@ -292,7 +427,7 @@ Why these metrics matter:
 - Category ambiguity requires explicit ambiguity penalties.
 - Extreme head-term outliers justify strict term caps and guarded head-term use.
 
-## 4. End-to-End Flow
+## 3. End-to-End Flow
 
 ```mermaid
 flowchart TD
@@ -317,19 +452,19 @@ flowchart TD
     G --> N[Top category + alternatives + evidence]
 ```
 
-## 5. Suggestion Lane (Lexical Fast Lane)
+## 4. Suggestion Lane (Lexical Fast Lane)
 
 Endpoint:
 
 - `GET /ui-api/suggestions`
 
-### 5.1 Query Preprocessing
+### 4.1 Query Preprocessing
 
 - Lowercase and token normalization.
 - Remove connective noise words from significance logic.
 - Build anchor token behavior for intent-preserving ranking.
 
-### 5.2 Candidate Sources (Priority)
+### 4.2 Candidate Sources (Priority)
 
 1. `keyword_name`
 2. `variant_terms`
@@ -337,7 +472,7 @@ Endpoint:
 4. `head_terms` (guarded mode only)
 5. Product-name fallback from product index
 
-### 5.3 Guardrails
+### 4.3 Guardrails
 
 - Skip `head_terms` when term-list size exceeds `HEAD_TERMS_HARD_CAP`.
 - Truncate per document by configured limits:
@@ -346,7 +481,7 @@ Endpoint:
   - `LONG_TAIL_TERMS_PER_DOC_LIMIT`
 - Remove low-signal noisy candidates.
 
-### 5.4 Ranking Behavior
+### 4.4 Ranking Behavior
 
 Ranking order is lexical stage-based and evidence-first:
 
@@ -357,7 +492,7 @@ Ranking order is lexical stage-based and evidence-first:
 - weak contains
 - fuzzy fallback
 
-### 5.5 Exact Runtime Suggestion Pipeline (Implementation Detail)
+### 4.5 Exact Runtime Suggestion Pipeline (Implementation Detail)
 
 Runtime function: `_fetch_keyword_suggestions(query, limit)`.
 
@@ -409,7 +544,7 @@ Execution sequence:
 - Prefer strong-stage items (stage `<= 4`) up to `limit`.
 - Otherwise fill with best available ordered candidates.
 
-### 5.6 Head-Term Handling (Plan vs Runtime)
+### 4.6 Head-Term Handling (Plan vs Runtime)
 
 Head terms are included by design, but only in guarded mode.
 
@@ -423,7 +558,7 @@ Head-term controls in runtime:
 
 This preserves useful recall from head terms while preventing noisy takeover.
 
-### 5.7 Incomplete-Term Suppression (Observed Production Case)
+### 4.7 Incomplete-Term Suppression (Observed Production Case)
 
 Observed issue:
 
@@ -443,14 +578,14 @@ Effect:
 - Incomplete terms are suppressed.
 - Valid full terms such as `color t-shirts` remain eligible.
 
-## 6. Mapping Lane (Category Intent)
+## 5. Mapping Lane (Category Intent)
 
 Endpoints:
 
 - `GET /ui-api/hierarchy`
 - `GET /ui-api/map-category`
 
-### 6.1 Notation
+### 5.1 Notation
 
 For cluster hit `i`:
 
@@ -460,7 +595,7 @@ For cluster hit `i`:
 - `m_i`: lexical match signal
 - `w_lane`: lane weight (`1.0` lexical, semantic weight for semantic lane)
 
-### 6.2 Reliability Factor
+### 5.2 Reliability Factor
 
 Reliability per cluster hit:
 
@@ -482,7 +617,7 @@ Interpretation:
 - Higher support increases trust.
 - Higher ambiguity decreases trust.
 
-### 6.3 Match Signal
+### 5.3 Match Signal
 
 `m_i` is derived from lexical quality over keyword_name, variants, long-tail, and (guarded) head terms, using:
 
@@ -493,7 +628,7 @@ Interpretation:
 
 with clamping to `[0, 1]`.
 
-### 6.4 Document Vote Formula
+### 5.4 Document Vote Formula
 
 Normalized search score:
 
@@ -509,7 +644,7 @@ $$
 
 If one cluster maps to multiple categories, vote is split equally across those categories.
 
-### 6.5 Category Confidence
+### 5.5 Category Confidence
 
 For category `k`:
 
@@ -527,7 +662,7 @@ $$
 \mathrm{margin} = \mathrm{confidence}_{top1} - \mathrm{confidence}_{top2}
 $$
 
-## 7. Thresholds and Decision Policy
+## 6. Thresholds and Decision Policy
 
 Current runtime defaults:
 
@@ -556,7 +691,7 @@ Decision rules:
 | `options` | otherwise show top alternatives |
 | `no_match` | no usable evidence |
 
-## 8. Fallback Control Flow
+## 7. Fallback Control Flow
 
 ```mermaid
 flowchart LR
@@ -579,7 +714,7 @@ Important safety behavior:
 - Semantic cluster lane is not always on; it is conditional.
 - Product fallback maps by aggregated category votes, not by a single nearest product.
 
-### 8.1 Product Main vs Product Short Order
+### 7.1 Product Main vs Product Short Order
 
 The product-vector order is deterministic.
 
@@ -600,7 +735,7 @@ Product vectors are only used after lexical and optional semantic-cluster lanes 
 
 This means `product_vector_short` is not an earlier lane; it is used inside the final product-vote fallback stage.
 
-### 8.2 Free-Text vs Selected-Suggestion Mapping Behavior
+### 7.2 Free-Text vs Selected-Suggestion Mapping Behavior
 
 Mapping lane behavior differs by user input mode:
 
@@ -624,19 +759,19 @@ For `semantic` and `hybrid` modes:
 
 So, in search mode, main is primary retrieval and short is secondary rerank.
 
-## 9. API Outputs and Explainability
+## 8. API Outputs and Explainability
 
-### 9.1 Suggestions API
+### 8.1 Suggestions API
 
 - `GET /ui-api/suggestions?q=...&limit=...`
 - Returns suggestions, count, ranking order, and latency.
 
-### 9.2 Hierarchy Mapping API
+### 8.2 Hierarchy Mapping API
 
 - `GET /ui-api/hierarchy?keyword=...&max_cards=...`
 - Returns decision, confidence, margin, lanes used, cards, and matched-doc count.
 
-### 9.3 Intent Mapping API
+### 8.3 Intent Mapping API
 
 - `GET /ui-api/map-category?q=...&selected=...&max_cards=...`
 - Returns:
@@ -655,7 +790,7 @@ Evidence fields returned to support auditability:
 - `avg_category_ambiguity`
 - `lanes_used`
 
-### 9.4 UI Rendering Contract for Mapping Cards
+### 8.4 UI Rendering Contract for Mapping Cards
 
 UI behavior is now confidence-aware and non-congested.
 
@@ -677,7 +812,7 @@ UI behavior is now confidence-aware and non-congested.
 4. Display-level confidence formatting:
 - Confidence values are normalized to percentage for readability.
 
-## 10. Why This Approach Fits Current Data
+## 9. Why This Approach Fits Current Data
 
 1. Sparse support is handled through logarithmic support smoothing.
 2. Ambiguous clusters are penalized before voting impact increases.
@@ -685,7 +820,7 @@ UI behavior is now confidence-aware and non-congested.
 4. Semantic lane is controlled and used only when lexical confidence is weak.
 5. Product lane is a final fallback with vote aggregation, reducing one-hit errors.
 
-## 11. Governance and Tuning
+## 10. Governance and Tuning
 
 Primary tuning knobs:
 
@@ -716,7 +851,7 @@ Recommended rollout KPIs:
 - Semantic fallback activation rate
 - Product fallback activation rate
 
-### 11.1 Threshold Tuning Playbook (Required Before Final Lock)
+### 10.1 Threshold Tuning Playbook (Required Before Final Lock)
 
 Tuning should follow a fixed order to avoid coupled regressions.
 
@@ -750,7 +885,7 @@ Recommended sequence:
 - stable or improved top-1/top-3 acceptance
 - no significant latency regression (P95)
 
-## 12. Validation Checklist (No-Gap Verification)
+## 11. Validation Checklist (No-Gap Verification)
 
 Before release, confirm all checks below are true.
 
@@ -779,7 +914,7 @@ UI behavior:
 - free text shows dynamic top-1/top-2/top-3 based on relevance.
 - diagnostics are collapsible, not always expanded.
 
-## 13. Conclusion
+## 12. Conclusion
 
 The implemented search design is data-grounded, reliable under sparse and ambiguous cluster behavior, and submission-ready for business and engineering review.
 
@@ -792,11 +927,11 @@ It provides:
 - Verified safeguards for noisy/incomplete suggestion terms
 - Deterministic vector-lane order for both mapping and search
 
-## 14. API Request and Response Examples
+## 13. API Request and Response Examples
 
 This section provides practical examples for QA, product, and business walkthroughs.
 
-### 14.1 Suggestions API
+### 13.1 Suggestions API
 
 Request:
 
@@ -833,7 +968,7 @@ Validation notes:
 - Incomplete tails such as `color t` or `stain g` should not appear.
 - Head-term derived suggestions can appear only when guardrails are satisfied.
 
-### 14.2 Mapping API (Free-Text)
+### 13.2 Mapping API (Free-Text)
 
 Request:
 
@@ -904,7 +1039,7 @@ Validation notes:
 - Free-text can activate lexical, semantic, and product-vote lanes.
 - UI should render 1/2/3 cards dynamically based on relevance, not always 3.
 
-### 14.3 Mapping API (Selected Suggestion)
+### 13.3 Mapping API (Selected Suggestion)
 
 Request:
 
@@ -937,7 +1072,7 @@ Expected response shape:
 }
 ```
 
-### 14.4 Search API (Hybrid Mode)
+### 13.4 Search API (Hybrid Mode)
 
 Request:
 
@@ -989,7 +1124,7 @@ Validation notes:
 - `product_vector_main` is the primary kNN retrieval lane.
 - `product_vector_short` contributes as rerank/boost in semantic or hybrid modes.
 
-### 14.5 Quick QA Matrix
+### 13.5 Quick QA Matrix
 
 Use this matrix for rapid acceptance checks:
 
