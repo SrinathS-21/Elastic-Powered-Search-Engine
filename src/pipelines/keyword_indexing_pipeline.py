@@ -12,13 +12,7 @@ from bson import ObjectId
 from elasticsearch import Elasticsearch, helpers
 from pymongo import MongoClient
 
-try:
-    from ..ml.embeddings import EMBED_DIM, EMBED_MODEL_NAME, encode_document_batch
-except ImportError:
-    try:
-        from ml.embeddings import EMBED_DIM, EMBED_MODEL_NAME, encode_document_batch
-    except ImportError:
-        from src.ml.embeddings import EMBED_DIM, EMBED_MODEL_NAME, encode_document_batch
+from embedding_service.client import EMBED_DIM, EMBED_MODEL_NAME, encode_document_batch
 
 try:
     from ..core.synonym_data import load_protected_tokens, load_synonym_rules
