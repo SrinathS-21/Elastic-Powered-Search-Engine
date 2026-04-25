@@ -1,3 +1,9 @@
+"""Product search service with multiple ranking modes.
+
+Provides keyword, semantic, and hybrid ranking for product discovery
+with query expansion and relevance tuning.
+"""
+
 from __future__ import annotations
 
 import math
@@ -6,25 +12,12 @@ from typing import Any
 
 from fastapi import HTTPException
 
-try:
-    from ..core.clients import es
-    from ..core.config import INDEX_NAME, PAGE_SIZE, SHORT_VECTOR_RERANK_BOOST
-    from ..core.logger import log
-    from .mapping import product_short_vector_boost_map
-    from .suppliers import get_suppliers
-    from .synonyms import expand_synonyms
-    from ..ml.embeddings import encode_query_text
-except ImportError:
-    from core.clients import es
-    from core.config import INDEX_NAME, PAGE_SIZE, SHORT_VECTOR_RERANK_BOOST
-    from core.logger import log
-    from services.mapping import product_short_vector_boost_map
-    from services.suppliers import get_suppliers
-    from services.synonyms import expand_synonyms
-    try:
-        from ml.embeddings import encode_query_text
-    except ImportError:
-        from src.ml.embeddings import encode_query_text
+from src.core.clients import active_search_backend, es
+from src.core.config import INDEX_NAME, PAGE_SIZE, SHORT_VECTOR_RERANK_BOOST
+from src.core.embedding_client import encode_query_text
+from src.core.logger import log
+from src.services.mapping import product_short_vector_boost_map
+from src.services.synonyms import expand_synonyms
 
 
 _COMPLETION_FIELD_AVAILABLE: bool | None = None
@@ -41,6 +34,24 @@ def _completion_field_available() -> bool:
     except Exception:
         _COMPLETION_FIELD_AVAILABLE = False
     return _COMPLETION_FIELD_AVAILABLE
+
+
+def _opensearch_knn_query(
+    field_name: str,
+    query_vector: list[float],
+    k: int,
+    num_candidates: int,
+    cat_filters: list[dict] | None = None,
+) -> dict[str, Any]:
+    field_payload: dict[str, Any] = {
+        "vector": query_vector,
+        "k": int(k),
+    }
+    if num_candidates > 0:
+        field_payload["method_parameters"] = {"ef_search": int(num_candidates)}
+    if cat_filters:
+        field_payload["filter"] = {"bool": {"must": cat_filters}}
+    return {"knn": {field_name: field_payload}}
 
 
 def build_keyword_query(
@@ -321,38 +332,6 @@ def autocomplete_search(query: str) -> dict:
         for hit in product_response["hits"]["hits"]
     ]
 
-    supplier_query, _, _ = build_keyword_query(query)
-    try:
-        supplier_match_response = es.search(
-            index=INDEX_NAME,
-            size=12,
-            query=supplier_query,
-            _source=["userId"],
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Search backend unavailable: {exc}") from exc
-
-    supplier_user_ids = list(
-        {
-            hit.get("_source", {}).get("userId", "")
-            for hit in supplier_match_response.get("hits", {}).get("hits", [])
-            if hit.get("_source", {}).get("userId", "")
-        }
-    )
-    enriched_suppliers = get_suppliers(supplier_user_ids)[:6]
-    suppliers = [
-        {
-            "businessName": supplier.get("businessName", ""),
-            "logoUrl": supplier.get("logoUrl") or "",
-            "country": supplier.get("country") or "",
-            "categories": supplier.get("categories") or [],
-            "packageType": supplier.get("packageType") or "free",
-            "profileUrl": supplier.get("profileUrl") or "",
-        }
-        for supplier in enriched_suppliers
-        if supplier.get("businessName")
-    ]
-
     latency_ms = round((time.perf_counter() - start) * 1000, 1)
 
     return {
@@ -362,7 +341,6 @@ def autocomplete_search(query: str) -> dict:
         "product_categories": top_bucket("prodcat_filter"),
         "products": products,
         "completion_suggestions": completion_suggestions,
-        "suppliers": suppliers,
         "total": product_response["hits"]["total"]["value"],
         "latency_ms": latency_ms,
     }
@@ -427,17 +405,29 @@ def search_products(
     }
 
     knn_cfg = None
+    opensearch_knn_query = None
+    resolved_backend = active_search_backend()
     if mode in ("semantic", "hybrid"):
         try:
             query_vector = list(encode_query_text(query))
             knn_k = max(PAGE_SIZE, from_offset + PAGE_SIZE)
-            knn_cfg = {
-                "field": "product_vector_main",
-                "query_vector": query_vector,
-                "k": knn_k,
-                "num_candidates": max(180, knn_k * 3),
-                **({"filter": {"bool": {"must": cat_filters}}} if cat_filters else {}),
-            }
+            knn_num_candidates = max(180, knn_k * 3)
+            if resolved_backend == "opensearch":
+                opensearch_knn_query = _opensearch_knn_query(
+                    field_name="product_vector_main",
+                    query_vector=query_vector,
+                    k=knn_k,
+                    num_candidates=knn_num_candidates,
+                    cat_filters=cat_filters,
+                )
+            else:
+                knn_cfg = {
+                    "field": "product_vector_main",
+                    "query_vector": query_vector,
+                    "k": knn_k,
+                    "num_candidates": knn_num_candidates,
+                    **({"filter": {"bool": {"must": cat_filters}}} if cat_filters else {}),
+                }
         except Exception as exc:
             if mode == "semantic":
                 raise HTTPException(
@@ -459,10 +449,21 @@ def search_products(
     if mode == "keyword":
         search_kwargs["query"] = keyword_query
     elif mode == "semantic":
-        search_kwargs["knn"] = knn_cfg
+        if resolved_backend == "opensearch":
+            search_kwargs["query"] = opensearch_knn_query
+        else:
+            search_kwargs["knn"] = knn_cfg
     else:
-        search_kwargs["query"] = keyword_query
-        search_kwargs["knn"] = knn_cfg
+        if resolved_backend == "opensearch":
+            search_kwargs["query"] = {
+                "bool": {
+                    "should": [keyword_query, opensearch_knn_query],
+                    "minimum_should_match": 1,
+                }
+            }
+        else:
+            search_kwargs["query"] = keyword_query
+            search_kwargs["knn"] = knn_cfg
 
     try:
         response = es.search(**search_kwargs)
@@ -510,7 +511,6 @@ def search_products(
             if hit["_source"].get("userId", "")
         }
     )
-    unique_suppliers = get_suppliers(seen_users)
 
     suggestion = None
     if total == 0 and "suggest" in response:
@@ -549,5 +549,4 @@ def search_products(
         "synonym_expanded": expanded,
         "search_mode": mode,
         "semantic_short_used": semantic_short_used,
-        "suppliers": unique_suppliers,
     }

@@ -1,105 +1,65 @@
+"""Query-to-category mapping with confidence calibration.
+
+Maps queries to product categories with semantic clustering, confidence scores,
+and product fallback logic. Includes confidence calibration and mapping history.
+"""
+
 from __future__ import annotations
 
 import hashlib
 import json
 import math
+import concurrent.futures
+from functools import lru_cache
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-try:
-    from ..core.clients import es
-    from ..core.config import (
-        AUTO_MAP_CONFIDENCE as CONFIG_AUTO_MAP_CONFIDENCE,
-        AUTO_MAP_MARGIN as CONFIG_AUTO_MAP_MARGIN,
-        CONFIRM_MAP_CONFIDENCE as CONFIG_CONFIRM_MAP_CONFIDENCE,
-        HEAD_TERMS_HARD_CAP,
-        INDEX_NAME,
-        KEYWORD_CLUSTER_FETCH_SIZE,
-        KEYWORD_INDEX,
-        KEYWORD_P95_PRODUCT_COUNT,
-        MAPPING_ALERT_LOW_CONFIDENCE_THRESHOLD as CONFIG_MAPPING_ALERT_LOW_CONFIDENCE_THRESHOLD,
-        MAPPING_ALERT_LOW_MARGIN_THRESHOLD as CONFIG_MAPPING_ALERT_LOW_MARGIN_THRESHOLD,
-        MAPPING_ALERT_PRODUCT_DOMINANCE_RATIO as CONFIG_MAPPING_ALERT_PRODUCT_DOMINANCE_RATIO,
-        MAPPING_ENABLE_CONFIDENCE_CALIBRATION as CONFIG_MAPPING_ENABLE_CONFIDENCE_CALIBRATION,
-        MAPPING_ENABLE_LEARNED_CONFIDENCE_CALIBRATION as CONFIG_MAPPING_ENABLE_LEARNED_CONFIDENCE_CALIBRATION,
-        MAPPING_ENABLE_PRODUCT_FALLBACK as CONFIG_MAPPING_ENABLE_PRODUCT_FALLBACK,
-        MAPPING_ENABLE_SEMANTIC_FALLBACK as CONFIG_MAPPING_ENABLE_SEMANTIC_FALLBACK,
-        MAPPING_PHASE3_CANARY_PERCENT as CONFIG_MAPPING_PHASE3_CANARY_PERCENT,
-        MAPPING_CONFIDENCE_MODEL_FILE as CONFIG_MAPPING_CONFIDENCE_MODEL_FILE,
-        MAPPING_TELEMETRY_ENABLED as CONFIG_MAPPING_TELEMETRY_ENABLED,
-        MAPPING_TELEMETRY_FILE as CONFIG_MAPPING_TELEMETRY_FILE,
-        PRODUCT_FALLBACK_MAX_GAIN_RATIO as CONFIG_PRODUCT_FALLBACK_MAX_GAIN_RATIO,
-        PRODUCT_FALLBACK_NEW_CATEGORY_CAP_RATIO as CONFIG_PRODUCT_FALLBACK_NEW_CATEGORY_CAP_RATIO,
-        PRODUCT_FALLBACK_STRONG_CONFIDENCE as CONFIG_PRODUCT_FALLBACK_STRONG_CONFIDENCE,
-        PRODUCT_FALLBACK_STRONG_COVERAGE as CONFIG_PRODUCT_FALLBACK_STRONG_COVERAGE,
-        PRODUCT_FALLBACK_TRIGGER as CONFIG_PRODUCT_FALLBACK_TRIGGER,
-        PRODUCT_MAIN_VOTE_SHARE as CONFIG_PRODUCT_MAIN_VOTE_SHARE,
-        PRODUCT_SHORT_VOTE_SHARE as CONFIG_PRODUCT_SHORT_VOTE_SHARE,
-        PRODUCT_VOTE_WEIGHT as CONFIG_PRODUCT_VOTE_WEIGHT,
-        RELIABILITY_BETA,
-        SEMANTIC_CLUSTER_WEIGHT as CONFIG_SEMANTIC_CLUSTER_WEIGHT,
-    )
-    from .internal.common import as_text, clamp, index_exists, trim_terms
-    from .internal.calibration import apply_isotonic_calibration, is_calibration_model_valid
-    from .internal.query_text import (
-        build_query_context,
-        canonical_token_list,
-        canonical_tokens,
-        normalize_query_text,
-        significant_tokens,
-        suggestion_rank_features,
-        token_list,
-    )
-    from ..ml.embeddings import encode_query_text
-except ImportError:
-    from core.clients import es
-    from core.config import (
-        AUTO_MAP_CONFIDENCE as CONFIG_AUTO_MAP_CONFIDENCE,
-        AUTO_MAP_MARGIN as CONFIG_AUTO_MAP_MARGIN,
-        CONFIRM_MAP_CONFIDENCE as CONFIG_CONFIRM_MAP_CONFIDENCE,
-        HEAD_TERMS_HARD_CAP,
-        INDEX_NAME,
-        KEYWORD_CLUSTER_FETCH_SIZE,
-        KEYWORD_INDEX,
-        KEYWORD_P95_PRODUCT_COUNT,
-        MAPPING_ALERT_LOW_CONFIDENCE_THRESHOLD as CONFIG_MAPPING_ALERT_LOW_CONFIDENCE_THRESHOLD,
-        MAPPING_ALERT_LOW_MARGIN_THRESHOLD as CONFIG_MAPPING_ALERT_LOW_MARGIN_THRESHOLD,
-        MAPPING_ALERT_PRODUCT_DOMINANCE_RATIO as CONFIG_MAPPING_ALERT_PRODUCT_DOMINANCE_RATIO,
-        MAPPING_ENABLE_CONFIDENCE_CALIBRATION as CONFIG_MAPPING_ENABLE_CONFIDENCE_CALIBRATION,
-        MAPPING_ENABLE_LEARNED_CONFIDENCE_CALIBRATION as CONFIG_MAPPING_ENABLE_LEARNED_CONFIDENCE_CALIBRATION,
-        MAPPING_ENABLE_PRODUCT_FALLBACK as CONFIG_MAPPING_ENABLE_PRODUCT_FALLBACK,
-        MAPPING_ENABLE_SEMANTIC_FALLBACK as CONFIG_MAPPING_ENABLE_SEMANTIC_FALLBACK,
-        MAPPING_PHASE3_CANARY_PERCENT as CONFIG_MAPPING_PHASE3_CANARY_PERCENT,
-        MAPPING_CONFIDENCE_MODEL_FILE as CONFIG_MAPPING_CONFIDENCE_MODEL_FILE,
-        MAPPING_TELEMETRY_ENABLED as CONFIG_MAPPING_TELEMETRY_ENABLED,
-        MAPPING_TELEMETRY_FILE as CONFIG_MAPPING_TELEMETRY_FILE,
-        PRODUCT_FALLBACK_MAX_GAIN_RATIO as CONFIG_PRODUCT_FALLBACK_MAX_GAIN_RATIO,
-        PRODUCT_FALLBACK_NEW_CATEGORY_CAP_RATIO as CONFIG_PRODUCT_FALLBACK_NEW_CATEGORY_CAP_RATIO,
-        PRODUCT_FALLBACK_STRONG_CONFIDENCE as CONFIG_PRODUCT_FALLBACK_STRONG_CONFIDENCE,
-        PRODUCT_FALLBACK_STRONG_COVERAGE as CONFIG_PRODUCT_FALLBACK_STRONG_COVERAGE,
-        PRODUCT_FALLBACK_TRIGGER as CONFIG_PRODUCT_FALLBACK_TRIGGER,
-        PRODUCT_MAIN_VOTE_SHARE as CONFIG_PRODUCT_MAIN_VOTE_SHARE,
-        PRODUCT_SHORT_VOTE_SHARE as CONFIG_PRODUCT_SHORT_VOTE_SHARE,
-        PRODUCT_VOTE_WEIGHT as CONFIG_PRODUCT_VOTE_WEIGHT,
-        RELIABILITY_BETA,
-        SEMANTIC_CLUSTER_WEIGHT as CONFIG_SEMANTIC_CLUSTER_WEIGHT,
-    )
-    from services.internal.common import as_text, clamp, index_exists, trim_terms
-    from services.internal.calibration import apply_isotonic_calibration, is_calibration_model_valid
-    from services.internal.query_text import (
-        build_query_context,
-        canonical_token_list,
-        canonical_tokens,
-        normalize_query_text,
-        significant_tokens,
-        suggestion_rank_features,
-        token_list,
-    )
-    try:
-        from ml.embeddings import encode_query_text
-    except ImportError:
-        from src.ml.embeddings import encode_query_text
+from src.core.clients import active_search_backend, es
+from src.core.config import (
+    AUTO_MAP_CONFIDENCE as CONFIG_AUTO_MAP_CONFIDENCE,
+    AUTO_MAP_MARGIN as CONFIG_AUTO_MAP_MARGIN,
+    CONFIRM_MAP_CONFIDENCE as CONFIG_CONFIRM_MAP_CONFIDENCE,
+    HEAD_TERMS_HARD_CAP,
+    INDEX_NAME,
+    KEYWORD_CLUSTER_FETCH_SIZE,
+    KEYWORD_INDEX,
+    KEYWORD_P95_PRODUCT_COUNT,
+    MAPPING_ALERT_LOW_CONFIDENCE_THRESHOLD as CONFIG_MAPPING_ALERT_LOW_CONFIDENCE_THRESHOLD,
+    MAPPING_ALERT_LOW_MARGIN_THRESHOLD as CONFIG_MAPPING_ALERT_LOW_MARGIN_THRESHOLD,
+    MAPPING_ALERT_PRODUCT_DOMINANCE_RATIO as CONFIG_MAPPING_ALERT_PRODUCT_DOMINANCE_RATIO,
+    MAPPING_CONFIDENCE_MODEL_FILE as CONFIG_MAPPING_CONFIDENCE_MODEL_FILE,
+    MAPPING_ENABLE_CONFIDENCE_CALIBRATION as CONFIG_MAPPING_ENABLE_CONFIDENCE_CALIBRATION,
+    MAPPING_ENABLE_LEARNED_CONFIDENCE_CALIBRATION as CONFIG_MAPPING_ENABLE_LEARNED_CONFIDENCE_CALIBRATION,
+    MAPPING_ENABLE_PRODUCT_FALLBACK as CONFIG_MAPPING_ENABLE_PRODUCT_FALLBACK,
+    MAPPING_ENABLE_SEMANTIC_FALLBACK as CONFIG_MAPPING_ENABLE_SEMANTIC_FALLBACK,
+    MAPPING_PHASE3_CANARY_PERCENT as CONFIG_MAPPING_PHASE3_CANARY_PERCENT,
+    MAPPING_TELEMETRY_ENABLED as CONFIG_MAPPING_TELEMETRY_ENABLED,
+    MAPPING_TELEMETRY_FILE as CONFIG_MAPPING_TELEMETRY_FILE,
+    PRODUCT_FALLBACK_MAX_GAIN_RATIO as CONFIG_PRODUCT_FALLBACK_MAX_GAIN_RATIO,
+    PRODUCT_FALLBACK_NEW_CATEGORY_CAP_RATIO as CONFIG_PRODUCT_FALLBACK_NEW_CATEGORY_CAP_RATIO,
+    PRODUCT_FALLBACK_STRONG_CONFIDENCE as CONFIG_PRODUCT_FALLBACK_STRONG_CONFIDENCE,
+    PRODUCT_FALLBACK_STRONG_COVERAGE as CONFIG_PRODUCT_FALLBACK_STRONG_COVERAGE,
+    PRODUCT_FALLBACK_TRIGGER as CONFIG_PRODUCT_FALLBACK_TRIGGER,
+    PRODUCT_MAIN_VOTE_SHARE as CONFIG_PRODUCT_MAIN_VOTE_SHARE,
+    PRODUCT_SHORT_VOTE_SHARE as CONFIG_PRODUCT_SHORT_VOTE_SHARE,
+    PRODUCT_VOTE_WEIGHT as CONFIG_PRODUCT_VOTE_WEIGHT,
+    RELIABILITY_BETA,
+    SEMANTIC_CLUSTER_WEIGHT as CONFIG_SEMANTIC_CLUSTER_WEIGHT,
+)
+from src.core.embedding_client import encode_query_text
+from src.core.logger import log
+from src.services.internal.calibration import apply_isotonic_calibration, is_calibration_model_valid
+from src.services.internal.common import as_text, clamp, index_exists, trim_terms
+from src.services.internal.query_text import (
+    build_query_context,
+    canonical_token_list,
+    canonical_tokens,
+    normalize_query_text,
+    significant_tokens,
+    suggestion_rank_features,
+    token_list,
+)
 
 
 # Mutable runtime knobs used by tuning scripts.
@@ -135,6 +95,65 @@ DEMOGRAPHIC_TOKENS = {
     "women", "woman", "ladies", "lady", "men", "man", "male", "female",
     "boys", "boy", "girls", "girl", "kids", "kid", "children", "child", "unisex",
 }
+
+_FEMALE_DEMOGRAPHIC_TOKENS = {
+    "women", "woman", "ladies", "lady", "female", "girls", "girl",
+}
+_MALE_DEMOGRAPHIC_TOKENS = {
+    "men", "man", "male", "boys", "boy",
+}
+_KIDS_DEMOGRAPHIC_TOKENS = {
+    "kids", "kid", "children", "child",
+}
+_UNISEX_DEMOGRAPHIC_TOKENS = {"unisex"}
+
+_CANON_FEMALE_DEMOGRAPHIC_TOKENS = set(canonical_tokens(list(_FEMALE_DEMOGRAPHIC_TOKENS)))
+_CANON_MALE_DEMOGRAPHIC_TOKENS = set(canonical_tokens(list(_MALE_DEMOGRAPHIC_TOKENS)))
+_CANON_KIDS_DEMOGRAPHIC_TOKENS = set(canonical_tokens(list(_KIDS_DEMOGRAPHIC_TOKENS)))
+_CANON_UNISEX_DEMOGRAPHIC_TOKENS = set(canonical_tokens(list(_UNISEX_DEMOGRAPHIC_TOKENS)))
+
+
+def _opensearch_knn_query(field_name: str, query_vector: list[float], k: int, num_candidates: int) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "vector": query_vector,
+        "k": int(k),
+    }
+    if num_candidates > 0:
+        payload["method_parameters"] = {"ef_search": int(num_candidates)}
+    return {"knn": {field_name: payload}}
+
+
+def _knn_search_kwargs(field_name: str, query_vector: list[float], k: int, num_candidates: int) -> dict[str, Any]:
+    if active_search_backend() == "opensearch":
+        return {
+            "query": _opensearch_knn_query(
+                field_name=field_name,
+                query_vector=query_vector,
+                k=k,
+                num_candidates=num_candidates,
+            )
+        }
+    return {
+        "knn": {
+            "field": field_name,
+            "query_vector": query_vector,
+            "k": int(k),
+            "num_candidates": int(num_candidates),
+        }
+    }
+
+
+def _demographic_groups_for_tokens(tokens: set[str]) -> set[str]:
+    groups: set[str] = set()
+    if tokens & _CANON_FEMALE_DEMOGRAPHIC_TOKENS:
+        groups.add("female")
+    if tokens & _CANON_MALE_DEMOGRAPHIC_TOKENS:
+        groups.add("male")
+    if tokens & _CANON_KIDS_DEMOGRAPHIC_TOKENS:
+        groups.add("kids")
+    if tokens & _CANON_UNISEX_DEMOGRAPHIC_TOKENS:
+        groups.add("unisex")
+    return groups
 
 
 def _phase3_enabled_for_query(query_text: str) -> bool:
@@ -220,18 +239,27 @@ def _keyword_cluster_lexical_hits(query_text: str, size: int, phrase_candidates:
         return []
 
     try:
+        q_tokens = token_list(query_text)
+        is_single_token = len(q_tokens) <= 1
         should_clauses: list[dict[str, Any]] = [
             {"match_phrase": {"keyword_name": {"query": query_text, "boost": 12.0}}},
             {"match_phrase_prefix": {"keyword_name": {"query": query_text, "boost": 10.0}}},
             {"match": {"keyword_name": {"query": query_text, "operator": "and", "boost": 8.0}}},
-            {"match": {"keyword_name.stem": {"query": query_text, "operator": "and", "boost": 6.0}}},
-            {"match_phrase_prefix": {"variant_terms": {"query": query_text, "boost": 6.0}}},
             {"match": {"variant_terms": {"query": query_text, "operator": "and", "boost": 4.5}}},
-            {"match": {"variant_terms.stem": {"query": query_text, "operator": "and", "boost": 3.9}}},
             {"match": {"long_tail_terms": {"query": query_text, "operator": "and", "boost": 2.0}}},
-            {"match": {"long_tail_terms.stem": {"query": query_text, "operator": "and", "boost": 1.7}}},
-            {"match": {"keyword_name": {"query": query_text, "fuzziness": "AUTO", "prefix_length": 1, "boost": 0.8}}},
         ]
+        # Stemming/fuzzy helps recall, but for 1-word queries it can over-match
+        # unrelated stems (e.g. "whiskey" vs "whisk"). Prefer precise lexical
+        # signals for single-token inputs.
+        if not is_single_token:
+            should_clauses.extend(
+                [
+                    {"match": {"keyword_name.stem": {"query": query_text, "operator": "and", "boost": 6.0}}},
+                    {"match": {"variant_terms.stem": {"query": query_text, "operator": "and", "boost": 3.9}}},
+                    {"match": {"long_tail_terms.stem": {"query": query_text, "operator": "and", "boost": 1.7}}},
+                    {"match": {"keyword_name": {"query": query_text, "fuzziness": "AUTO", "prefix_length": 1, "boost": 0.8}}},
+                ]
+            )
         for phrase in (phrase_candidates or [])[:4]:
             should_clauses.append({"match_phrase": {"keyword_name": {"query": phrase, "boost": 10.5}}})
             should_clauses.append({"match_phrase": {"variant_terms": {"query": phrase, "boost": 3.8}}})
@@ -276,9 +304,9 @@ def _keyword_cluster_semantic_hits(query_text: str, size: int) -> list[dict]:
     ]
     merged: dict[str, dict[str, Any]] = {}
 
-    for field_name, lane_weight in vector_lanes:
+    def fetch_lane(field_name: str) -> tuple[str, list[dict]]:
         try:
-            response = es.search(
+            resp = es.search(
                 index=KEYWORD_INDEX,
                 size=size,
                 _source=[
@@ -290,17 +318,24 @@ def _keyword_cluster_semantic_hits(query_text: str, size: int) -> list[dict]:
                     "category_count",
                     "product_category_ids",
                 ],
-                knn={
-                    "field": field_name,
-                    "query_vector": query_vector,
-                    "k": size,
-                    "num_candidates": max(120, size * 4),
-                },
+                **_knn_search_kwargs(
+                    field_name=field_name,
+                    query_vector=query_vector,
+                    k=size,
+                    num_candidates=max(120, size * 4),
+                ),
             )
+            return field_name, resp.get("hits", {}).get("hits", [])
         except Exception:
-            continue
+            return field_name, []
 
-        hits = response.get("hits", {}).get("hits", [])
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        lane_results = list(executor.map(lambda lane: fetch_lane(lane[0]), vector_lanes))
+
+    results_by_lane = dict(lane_results)
+
+    for field_name, lane_weight in vector_lanes:
+        hits = results_by_lane.get(field_name, [])
         if not hits:
             continue
 
@@ -387,8 +422,13 @@ def _query_anchor_constraints(query_context: dict[str, Any]) -> dict[str, Any]:
         if as_text(token).strip()
     ]
     canonical_anchor_tokens = canonical_tokens(raw_anchor_tokens)
-    if not canonical_anchor_tokens:
-        canonical_anchor_tokens = canonical_intent_tokens[-2:] if len(canonical_intent_tokens) >= 2 else canonical_intent_tokens[:]
+    trailing_intent_tokens = canonical_intent_tokens[-2:] if len(canonical_intent_tokens) >= 2 else canonical_intent_tokens[:]
+    if canonical_anchor_tokens:
+        for token in trailing_intent_tokens:
+            if token and token not in canonical_anchor_tokens:
+                canonical_anchor_tokens.append(token)
+    else:
+        canonical_anchor_tokens = trailing_intent_tokens
 
     domain_anchors = {token for token in canonical_anchor_tokens if token and token not in DEMOGRAPHIC_TOKENS}
     demographic_anchors = {token for token in canonical_anchor_tokens if token in DEMOGRAPHIC_TOKENS}
@@ -396,7 +436,8 @@ def _query_anchor_constraints(query_context: dict[str, Any]) -> dict[str, Any]:
     return {
         "domain": domain_anchors,
         "demographic": demographic_anchors,
-        "strict": bool(len(canonical_intent_tokens) >= 3 and domain_anchors),
+        # Strict anchors help short, focused queries but can over-prune long-tail titles.
+        "strict": bool(3 <= len(canonical_intent_tokens) <= 5 and domain_anchors),
     }
 
 
@@ -523,12 +564,12 @@ def _product_knn_hits(query_vector: list[float], field_name: str, size: int) -> 
             index=INDEX_NAME,
             size=size,
             _source=["productCategory_id", "productName"],
-            knn={
-                "field": field_name,
-                "query_vector": query_vector,
-                "k": size,
-                "num_candidates": max(120, size * 4),
-            },
+            **_knn_search_kwargs(
+                field_name=field_name,
+                query_vector=query_vector,
+                k=size,
+                num_candidates=max(120, size * 4),
+            ),
         )
     except Exception:
         return []
@@ -566,8 +607,12 @@ def _product_category_vote_hits(query_text: str, size: int = 48) -> tuple[dict[s
     except Exception:
         return {}, 0
 
-    main_hits = _product_knn_hits(query_vector, "product_vector_main", size=size)
-    short_hits = _product_knn_hits(query_vector, "product_vector_short", size=size)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        future_main = executor.submit(_product_knn_hits, query_vector, "product_vector_main", size)
+        future_short = executor.submit(_product_knn_hits, query_vector, "product_vector_short", size)
+        main_hits = future_main.result()
+        short_hits = future_short.result()
+
     if not main_hits and not short_hits:
         return {}, 0
 
@@ -617,7 +662,9 @@ def _product_category_vote_hits(query_text: str, size: int = 48) -> tuple[dict[s
     return category_votes, len(seen_doc_ids)
 
 
-def _resolve_category_meta(category_ids: list[str]) -> dict[str, dict[str, str]]:
+@lru_cache(maxsize=2048)
+def _cached_category_meta(category_ids_tuple: tuple[str, ...]) -> dict[str, dict[str, str]]:
+    category_ids = list(category_ids_tuple)
     if not category_ids or not index_exists(INDEX_NAME):
         return {}
 
@@ -659,6 +706,62 @@ def _resolve_category_meta(category_ids: list[str]) -> dict[str, dict[str, str]]
     return meta
 
 
+def _resolve_category_meta(category_ids: list[str]) -> dict[str, dict[str, str]]:
+    """Fetches human readable names for category IDs, heavily cached in memory."""
+    if not category_ids:
+        return {}
+    # Convert list to tuple for lru_cache hashing, sort to ensure cache hits for same items
+    return _cached_category_meta(tuple(sorted(set(category_ids))))
+
+
+def _category_name_intent_overlap(names: dict[str, str], intent_tokens: set[str]) -> float:
+    if not intent_tokens:
+        return 0.0
+
+    text = " ".join(
+        part
+        for part in [
+            as_text(names.get("category_name")),
+            as_text(names.get("subCategory_name")),
+            as_text(names.get("productCategory_name")),
+        ]
+        if part
+    )
+    category_tokens = set(canonical_token_list(text))
+    if not category_tokens:
+        return 0.0
+
+    return clamp(len(category_tokens & intent_tokens) / max(1, len(intent_tokens)), 0.0, 1.0)
+
+
+def _category_demographic_factor(names: dict[str, str], preferred_demographic_anchors: set[str]) -> float:
+    if not preferred_demographic_anchors:
+        return 1.0
+
+    query_groups = _demographic_groups_for_tokens(set(canonical_tokens(list(preferred_demographic_anchors))))
+    if not query_groups:
+        return 1.0
+
+    text = " ".join(
+        part
+        for part in [
+            as_text(names.get("category_name")),
+            as_text(names.get("subCategory_name")),
+            as_text(names.get("productCategory_name")),
+        ]
+        if part
+    )
+    category_tokens = set(canonical_token_list(text))
+    category_groups = _demographic_groups_for_tokens(category_tokens)
+    if not category_groups:
+        return 1.0
+    if "unisex" in category_groups:
+        return 1.02
+    if query_groups & category_groups:
+        return 1.08
+    return 0.6
+
+
 def _calibrated_confidence(bucket: dict[str, Any], total_score: float) -> tuple[float, float]:
     raw_share = clamp(float(bucket.get("raw_score") or 0.0) / max(total_score, 1e-9), 0.0, 1.0)
     evidence_count = max(1, int(bucket.get("cluster_hits") or 0) + int(bucket.get("product_vote_hits") or 0))
@@ -692,9 +795,16 @@ def _build_mapping_cards(
     category_votes: dict[str, dict[str, Any]],
     max_cards: int,
     use_calibrated_confidence: bool,
+    intent_tokens: list[str] | None = None,
+    preferred_demographic_anchors: set[str] | None = None,
 ) -> list[dict]:
     if not category_votes:
         return []
+
+    intent_token_set = set(canonical_tokens(intent_tokens or []))
+    preferred_demographic_set = {
+        token for token in canonical_tokens(list(preferred_demographic_anchors or set())) if token
+    }
 
     ordered = sorted(
         category_votes.items(),
@@ -708,11 +818,12 @@ def _build_mapping_cards(
         ),
     )
     total_score = sum(item[1]["raw_score"] for item in ordered) or 1.0
-    top_ids = [category_id for category_id, _bucket in ordered[: max(6, max_cards * 2)]]
+    candidate_limit = max(6, max_cards * 2)
+    top_ids = [category_id for category_id, _bucket in ordered[:candidate_limit]]
     category_meta = _resolve_category_meta(top_ids)
 
     cards: list[dict] = []
-    for category_id, bucket in ordered[:max_cards]:
+    for category_id, bucket in ordered[:candidate_limit]:
         evidence_count = max(1, bucket["cluster_hits"] + bucket["product_vote_hits"])
         avg_support = bucket["support_sum"] / evidence_count
         avg_ambiguity = bucket["ambiguity_sum"] / evidence_count
@@ -722,7 +833,14 @@ def _build_mapping_cards(
         confidence_model_used = False
         if use_calibrated_confidence:
             learned_confidence, confidence_model_used = _learned_confidence(raw_confidence)
-            confidence = learned_confidence if learned_confidence is not None else heuristic_confidence
+            if learned_confidence is None:
+                confidence = heuristic_confidence
+            else:
+                confidence = learned_confidence
+                if abs(learned_confidence - heuristic_confidence) >= 0.25 and raw_confidence < 0.75:
+                    # Prevent overconfident step-calibration spikes from flattening tie-break margins.
+                    confidence = (0.35 * learned_confidence) + (0.65 * heuristic_confidence)
+                    confidence_model_used = False
         else:
             confidence = raw_confidence
         lexical_hits = int(bucket["lexical_cluster_hits"])
@@ -741,6 +859,14 @@ def _build_mapping_cards(
         }
 
         names = category_meta.get(category_id, {})
+        resolved_label_present = bool(
+            as_text(names.get("category_name"))
+            or as_text(names.get("subCategory_name"))
+            or as_text(names.get("productCategory_name"))
+        )
+        if not resolved_label_present:
+            continue
+
         breadcrumb = " >> ".join(
             [
                 part
@@ -753,10 +879,29 @@ def _build_mapping_cards(
             ]
         ) or category_id
 
+        intent_overlap = _category_name_intent_overlap(names, intent_token_set)
+        demographic_factor = _category_demographic_factor(names, preferred_demographic_set)
+        raw_bucket_score = float(bucket.get("raw_score") or 0.0)
+        lexical_semantic_share = clamp(
+            (lane_scores["lexical"] + lane_scores["semantic"]) / max(lane_total, 1e-9),
+            0.0,
+            1.0,
+        )
+        intent_factor = 0.65 + (0.70 * intent_overlap)
+        evidence_balance_factor = 0.55 + (0.45 * lexical_semantic_share)
+        rank_score = (
+            raw_bucket_score
+            * demographic_factor
+            * intent_factor
+            * evidence_balance_factor
+            * (0.85 + (0.15 * avg_signal))
+        )
+
         cards.append(
             {
                 "product_category_id": category_id,
                 "breadcrumb": breadcrumb,
+                "_rank_score": round(rank_score, 6),
                 "count": total_evidence_hits,
                 "correlation_pct": round(raw_confidence * 100, 1),
                 "avg_token_coverage": round(avg_signal, 3),
@@ -795,6 +940,19 @@ def _build_mapping_cards(
             }
         )
 
+    cards.sort(
+        key=lambda card: (
+            -float(card.get("_rank_score") or 0.0),
+            -float(card.get("confidence_raw") or 0.0),
+            -float(card.get("avg_token_coverage") or 0.0),
+            -int((card.get("ranking_basis") or {}).get("total_evidence_hits") or 0),
+            as_text(card.get("product_category_id")),
+        )
+    )
+    cards = cards[:max_cards]
+    for card in cards:
+        card.pop("_rank_score", None)
+
     return cards
 
 
@@ -805,12 +963,94 @@ def _mapping_decision(cards: list[dict]) -> tuple[str, float, float]:
     top_conf = float(cards[0].get("confidence") or 0.0)
     second_conf = float(cards[1].get("confidence") or 0.0) if len(cards) > 1 else 0.0
     margin = top_conf - second_conf
+    confirm_margin = max(MAPPING_ALERT_LOW_MARGIN_THRESHOLD, 0.05)
 
     if top_conf >= AUTO_MAP_CONFIDENCE and margin >= AUTO_MAP_MARGIN:
         return "auto_map", top_conf, margin
-    if top_conf >= CONFIRM_MAP_CONFIDENCE:
+    if top_conf >= CONFIRM_MAP_CONFIDENCE and (len(cards) == 1 or margin >= confirm_margin):
         return "confirm", top_conf, margin
+    if top_conf >= CONFIRM_MAP_CONFIDENCE:
+        return "options", top_conf, margin
     return "options", top_conf, margin
+
+
+def _semantic_fallback_needed(cards: list[dict], selected_suggestion: str | None, intent_token_count: int = 0) -> bool:
+    """Decide whether to run the semantic lane.
+
+    Improvements vs original:
+    - Short queries (<=2 tokens) use semantic only when lexical evidence is weak.
+      Single/two-word products (Yoga Mat, LED Lamp, Alarm Clock) can have sparse
+      lexical coverage, but always-on semantic can also overfire on substring /
+      embedding artefacts (e.g. "whiskey" drifting toward "whisk").
+    - Long-tail queries (>=6 tokens) always use semantic: long product titles
+      contain multiple overlapping concepts that need vector-space disambiguation
+      to pick the dominant product intent.
+    """
+    if not cards:
+        return True
+
+    # For very short queries, semantic is helpful, but it can also dominate due to
+    # embedding/subword quirks. Prefer lexical when it already looks confident.
+    if intent_token_count <= 2:
+        top = cards[0]
+        top_conf = float(top.get("confidence") or 0.0)
+        second_conf = float(cards[1].get("confidence") or 0.0) if len(cards) > 1 else 0.0
+        margin = top_conf - second_conf
+        ranking_basis = top.get("ranking_basis") or {}
+        lexical_hits = int(ranking_basis.get("lexical_cluster_hits") or 0)
+        total_hits = int(ranking_basis.get("total_evidence_hits") or 0)
+        avg_coverage = float(top.get("avg_token_coverage") or 0.0)
+
+        short_query_strong_lexical = (
+            top_conf >= CONFIRM_MAP_CONFIDENCE
+            and margin >= max(MAPPING_ALERT_LOW_MARGIN_THRESHOLD, 0.05)
+            and avg_coverage >= 0.55
+            and lexical_hits >= 4
+            and total_hits >= 6
+        )
+        return not short_query_strong_lexical
+
+    # Always use semantic for long-tail product titles — they contain multiple
+    # concepts and need vector-space to find the dominant product intent.
+    if intent_token_count >= 6:
+        return True
+
+    top = cards[0]
+    top_conf = float(top.get("confidence") or 0.0)
+    second_conf = float(cards[1].get("confidence") or 0.0) if len(cards) > 1 else 0.0
+    margin = top_conf - second_conf
+
+    ranking_basis = top.get("ranking_basis") or {}
+    lexical_hits = int(ranking_basis.get("lexical_cluster_hits") or 0)
+    total_hits = int(ranking_basis.get("total_evidence_hits") or 0)
+    avg_coverage = float(top.get("avg_token_coverage") or 0.0)
+
+    strong_lexical = (
+        top_conf >= max(AUTO_MAP_CONFIDENCE, CONFIRM_MAP_CONFIDENCE + 0.15)
+        and margin >= AUTO_MAP_MARGIN
+        and avg_coverage >= 0.65
+        and lexical_hits >= 6
+        and total_hits >= 8
+    )
+    if strong_lexical:
+        return False
+
+    if (
+        selected_suggestion
+        and top_conf >= CONFIRM_MAP_CONFIDENCE
+        and margin >= AUTO_MAP_MARGIN
+        and avg_coverage >= 0.55
+        and lexical_hits >= 4
+    ):
+        return False
+
+    if top_conf < CONFIRM_MAP_CONFIDENCE:
+        return True
+
+    ambiguous_margin = margin < max(AUTO_MAP_MARGIN, MAPPING_ALERT_LOW_MARGIN_THRESHOLD + 0.02)
+    weak_coverage = avg_coverage < 0.55
+    sparse_lexical = lexical_hits < 4 or total_hits < 6
+    return ambiguous_margin or (weak_coverage and sparse_lexical)
 
 
 def _mapping_alerts(
@@ -881,11 +1121,27 @@ def map_query_to_categories(
     category_votes: dict[str, dict[str, Any]] = {}
     lanes_used: list[str] = []
 
-    lexical_hits = _keyword_cluster_lexical_hits(
-        intent_query,
-        size=KEYWORD_CLUSTER_FETCH_SIZE,
-        phrase_candidates=phrase_candidates,
-    )
+    # Fan out all major external queries concurrently.
+    # We will only process the results of semantic/product if they are needed,
+    # but starting them now collapses the network latency to the maximum of 1 query.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        future_lexical = executor.submit(
+            _keyword_cluster_lexical_hits,
+            intent_query,
+            size=KEYWORD_CLUSTER_FETCH_SIZE,
+            phrase_candidates=phrase_candidates,
+        )
+        future_semantic = executor.submit(
+            _keyword_cluster_semantic_hits,
+            intent_query,
+            size=max(24, KEYWORD_CLUSTER_FETCH_SIZE // 2)
+        )
+        future_product = executor.submit(
+            _product_category_vote_hits,
+            intent_query
+        )
+
+        lexical_hits = future_lexical.result()
     lexical_docs = _accumulate_cluster_votes(
         category_votes=category_votes,
         hits=lexical_hits,
@@ -905,11 +1161,12 @@ def map_query_to_categories(
         category_votes,
         max_cards=max_cards,
         use_calibrated_confidence=use_calibrated_confidence,
+        intent_tokens=query_context.get("canonical_intent_tokens") or [],
+        preferred_demographic_anchors=anchor_constraints["demographic"],
     )
-    top_conf = float(cards[0].get("confidence") or 0.0) if cards else 0.0
-
-    if MAPPING_ENABLE_SEMANTIC_FALLBACK and top_conf < CONFIRM_MAP_CONFIDENCE and not selected_suggestion:
-        semantic_hits = _keyword_cluster_semantic_hits(intent_query, size=max(24, KEYWORD_CLUSTER_FETCH_SIZE // 2))
+    _intent_token_count = len(query_context.get("canonical_intent_tokens") or [])
+    if MAPPING_ENABLE_SEMANTIC_FALLBACK and _semantic_fallback_needed(cards, selected_suggestion, intent_token_count=_intent_token_count):
+        semantic_hits = future_semantic.result()
         semantic_docs = _accumulate_cluster_votes(
             category_votes=category_votes,
             hits=semantic_hits,
@@ -928,6 +1185,8 @@ def map_query_to_categories(
         category_votes,
         max_cards=max_cards,
         use_calibrated_confidence=use_calibrated_confidence,
+        intent_tokens=query_context.get("canonical_intent_tokens") or [],
+        preferred_demographic_anchors=anchor_constraints["demographic"],
     )
     top_conf = float(cards[0].get("confidence") or 0.0) if cards else 0.0
 
@@ -956,18 +1215,38 @@ def map_query_to_categories(
     product_fallback_used = False
     product_hits = 0
     if MAPPING_ENABLE_PRODUCT_FALLBACK and top_conf < PRODUCT_FALLBACK_TRIGGER:
-        fallback_votes, product_hits = _product_category_vote_hits(intent_query)
+        fallback_votes, product_hits = future_product.result()
         if fallback_votes:
             fallback_applied = False
+            intent_token_set = set(canonical_tokens(query_context.get("canonical_intent_tokens") or []))
+            fallback_meta = _resolve_category_meta(list(fallback_votes.keys()))
             for category_id, bucket in fallback_votes.items():
                 fallback_scale = 1.0
                 fallback_raw = float(bucket.get("raw_score") or 0.0)
+                names = fallback_meta.get(category_id, {})
+                if not names:
+                    continue
+
+                intent_overlap = (
+                    _category_name_intent_overlap(names, intent_token_set)
+                    if intent_token_set
+                    else 0.0
+                )
+                if category_id not in pre_fallback_scores and intent_token_set and intent_overlap < 0.18:
+                    continue
+
                 if strong_primary_intent and fallback_raw > 0:
                     if category_id in pre_fallback_scores:
                         cap = pre_fallback_scores[category_id] * PRODUCT_FALLBACK_MAX_GAIN_RATIO
                     else:
                         cap = pre_fallback_top_score * PRODUCT_FALLBACK_NEW_CATEGORY_CAP_RATIO
                     fallback_scale = clamp((cap / fallback_raw) if cap > 0 else 0.0, 0.0, 1.0)
+
+                if intent_token_set:
+                    overlap_scale = 0.45 + (0.55 * intent_overlap)
+                    if category_id in pre_fallback_scores:
+                        overlap_scale = max(0.55, overlap_scale)
+                    fallback_scale *= overlap_scale
 
                 if fallback_scale <= 0.0:
                     continue
@@ -1003,6 +1282,8 @@ def map_query_to_categories(
         category_votes,
         max_cards=max_cards,
         use_calibrated_confidence=use_calibrated_confidence,
+        intent_tokens=query_context.get("canonical_intent_tokens") or [],
+        preferred_demographic_anchors=anchor_constraints["demographic"],
     )
 
     if strong_primary_intent and cards and pre_fallback_top_id:

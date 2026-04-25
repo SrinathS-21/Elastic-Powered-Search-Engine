@@ -1,4 +1,4 @@
-# Pepagora Search Functionality Approach (Updated Submission Document)
+﻿# Pepagora Search Functionality Approach (Updated Submission Document)
 
 Version date: 2026-04-14
 
@@ -1148,13 +1148,14 @@ Implementation source: src/main.py
 ./scripts/run_api.ps1
 
 # Product indexing
-./scripts/run_product_pipeline.ps1 create-index --recreate
-./scripts/run_product_pipeline.ps1 backfill --batch-size 192 --published-only
+./elasticsearch_indexing_service/start_product.ps1 create-index --recreate
+./elasticsearch_indexing_service/start_product.ps1 backfill --batch-size 192 --published-only
 
 # Keyword indexing
-./scripts/run_keyword_pipeline.ps1 create-index --recreate
-./scripts/run_keyword_pipeline.ps1 backfill --batch-size 400
+./elasticsearch_indexing_service/start_keyword.ps1 create-index --recreate
+./elasticsearch_indexing_service/start_keyword.ps1 backfill --batch-size 400
 
 # Benchmark
 ./scripts/run_benchmark.ps1 -QuerySet compact -Modes "keyword,semantic,hybrid"
 ```
+

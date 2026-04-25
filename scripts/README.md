@@ -1,12 +1,14 @@
-# Scripts
+﻿# Scripts
 
 Standardized PowerShell entrypoints for local development.
 
 ## Data-driven synonyms
 
 Set `B2B_SYNONYMS_FILE` to a JSON file path so API expansion and ES analyzers load synonyms from data instead of built-in seed lists.
-Recommended location: `config/synonyms.json`.
-If this file exists, `run_api.ps1`, `run_benchmark.ps1`, `run_product_pipeline.ps1`, and `run_keyword_pipeline.ps1` auto-export `B2B_SYNONYMS_FILE` when it is not already set.
+Recommended locations:
+- `config/synonyms.json` for API and benchmark scripts.
+- `elasticsearch_indexing_service/config/synonyms.json` for Elasticsearch indexing runners.
+If these files exist, `run_api.ps1` and `run_benchmark.ps1` auto-export `B2B_SYNONYMS_FILE` when it is not already set.
 
 Example file content:
 
@@ -30,18 +32,50 @@ If reindex/backfill is too expensive right now, you can still use data-driven ru
 Optional (template/analyzer assets only, no reindex):
 
 ```powershell
-./scripts/run_product_pipeline.ps1 install-assets
-./scripts/run_keyword_pipeline.ps1 install-assets
+./elasticsearch_indexing_service/start_product.ps1 install-assets
+./elasticsearch_indexing_service/start_keyword.ps1 install-assets
 ```
 
 Note: Without reindex/backfill, analyzer changes on newly created mappings/templates will not retroactively rewrite existing indexed tokens. Runtime query synonym expansion still works now.
 
 ## Start API
 
+`run_api.ps1` loads host/port from `.env` only. No CLI host/port overrides and no fallback defaults.
+
+Frontend pages resolve API base URL from `/ui-api/runtime-config`, which is sourced from `.env` values.
+Optional override for frontend/public URL: `UI_API_BASE_URL`.
+
+Recommended `.env` keys:
+
+```text
+APP_SCHEME=http
+APP_HOST=127.0.0.1
+APP_PORT=8000
+EMBEDDING_API_URL=http://127.0.0.1:8001
+# Required service URLs
+ES_HOST=http://localhost:9200
+MONGO_URI=mongodb://localhost:27017/admin
+ES_PORT=9200
+# Optional when frontend/public URL must differ from APP_SCHEME/APP_HOST/APP_PORT
+# UI_API_BASE_URL=http://127.0.0.1:8000
+```
+
 ```powershell
 ./scripts/run_api.ps1
-./scripts/run_api.ps1 -BindHost 0.0.0.0 -Port 8000
+./scripts/run_api.ps1 -Reload
+# Backward-compatible alias; same as default no-reload mode
 ./scripts/run_api.ps1 -NoReload
+```
+
+## Embedding API Client
+
+This repo only calls the external embedding API through `EMBEDDING_API_URL`.
+It does not host or train the embedding model locally.
+
+Required environment key:
+
+```text
+EMBEDDING_API_URL=http://127.0.0.1:8001
 ```
 
 Optional supplier enrichment toggle (default is disabled):
@@ -61,28 +95,76 @@ $env:ES_SUPPLIER_INDEX = "pepagora_suppliers"
 
 ## Product Index Pipeline
 
+These Elasticsearch commands run through `elasticsearch_indexing_service` and prefer `elasticsearch_indexing_service/.env`.
+
 ```powershell
-./scripts/run_product_pipeline.ps1 create-index --recreate
-./scripts/run_product_pipeline.ps1 create-index --use-aliases --index-name pepagora_products-000002
-./scripts/run_product_pipeline.ps1 install-assets
-./scripts/run_product_pipeline.ps1 backfill --batch-size 192 --index-name pepagora_products-000002 --published-only
-./scripts/run_product_pipeline.ps1 promote-alias --index-name pepagora_products-000002
-./scripts/run_product_pipeline.ps1 backfill --batch-size 192 --published-only
-./scripts/run_product_pipeline.ps1 backfill --batch-size 192 --use-write-alias --published-only
-./scripts/run_product_pipeline.ps1 backfill --batch-size 192 --limit 500
+./elasticsearch_indexing_service/start_product.ps1 create-index --recreate
+./elasticsearch_indexing_service/start_product.ps1 create-index --use-aliases --index-name pepagora_products-000002
+./elasticsearch_indexing_service/start_product.ps1 install-assets
+./elasticsearch_indexing_service/start_product.ps1 backfill --batch-size 192 --index-name pepagora_products-000002 --published-only
+./elasticsearch_indexing_service/start_product.ps1 promote-alias --index-name pepagora_products-000002
+./elasticsearch_indexing_service/start_product.ps1 backfill --batch-size 192 --published-only
+./elasticsearch_indexing_service/start_product.ps1 backfill --batch-size 192 --use-write-alias --published-only
+./elasticsearch_indexing_service/start_product.ps1 backfill --batch-size 192 --limit 500
 ```
 
 ## Keyword Index Pipeline
 
+These Elasticsearch commands run through `elasticsearch_indexing_service` and prefer `elasticsearch_indexing_service/.env`.
+
 ```powershell
-./scripts/run_keyword_pipeline.ps1 create-index --recreate
-./scripts/run_keyword_pipeline.ps1 create-index --use-aliases --index-name pepagora_keyword_cluster-000002
-./scripts/run_keyword_pipeline.ps1 install-assets
-./scripts/run_keyword_pipeline.ps1 backfill --batch-size 400 --index-name pepagora_keyword_cluster-000002
-./scripts/run_keyword_pipeline.ps1 promote-alias --index-name pepagora_keyword_cluster-000002
-./scripts/run_keyword_pipeline.ps1 backfill --batch-size 400
-./scripts/run_keyword_pipeline.ps1 backfill --batch-size 400 --use-write-alias
-./scripts/run_keyword_pipeline.ps1 backfill --batch-size 400 --limit 1000
+./elasticsearch_indexing_service/start_keyword.ps1 create-index --recreate
+./elasticsearch_indexing_service/start_keyword.ps1 create-index --use-aliases --index-name pepagora_keyword_cluster-000002
+./elasticsearch_indexing_service/start_keyword.ps1 install-assets
+./elasticsearch_indexing_service/start_keyword.ps1 backfill --batch-size 400 --index-name pepagora_keyword_cluster-000002
+./elasticsearch_indexing_service/start_keyword.ps1 promote-alias --index-name pepagora_keyword_cluster-000002
+./elasticsearch_indexing_service/start_keyword.ps1 backfill --batch-size 400
+./elasticsearch_indexing_service/start_keyword.ps1 backfill --batch-size 400 --use-write-alias
+./elasticsearch_indexing_service/start_keyword.ps1 backfill --batch-size 400 --limit 1000
+```
+
+## OpenSearch-Only Pipelines
+
+Use these entrypoints when you want index creation/backfill behavior that is explicit for OpenSearch (`knn_vector` mappings, OpenSearch client, and OpenSearch alias promotion flow).
+
+Product pipeline (OpenSearch):
+
+```powershell
+./opensearch_indexing_service/start_product.ps1 show-schema --output-file config/opensearch_product_schema_v1.json
+./opensearch_indexing_service/start_product.ps1 install-assets
+./opensearch_indexing_service/start_product.ps1 create-index --use-aliases --index-name pepagora_products_os-000001
+./opensearch_indexing_service/start_product.ps1 backfill --batch-size 192 --index-name pepagora_products_os-000001 --published-only
+./opensearch_indexing_service/start_product.ps1 promote-alias --index-name pepagora_products_os-000001
+```
+
+Keyword pipeline (OpenSearch):
+
+```powershell
+./opensearch_indexing_service/start_keyword.ps1 show-schema --output-file config/opensearch_keyword_schema_v1.json
+./opensearch_indexing_service/start_keyword.ps1 install-assets
+./opensearch_indexing_service/start_keyword.ps1 create-index --use-aliases --index-name pepagora_keyword_cluster_os-000001
+./opensearch_indexing_service/start_keyword.ps1 backfill --batch-size 400 --index-name pepagora_keyword_cluster_os-000001
+./opensearch_indexing_service/start_keyword.ps1 promote-alias --index-name pepagora_keyword_cluster_os-000001
+```
+
+Schema guardrails notebook (OpenSearch analyzers/mappings):
+
+```powershell
+# Open and run all cells in order
+notebooks/opensearch_schema_guardrails.ipynb
+```
+
+This notebook validates normalizers, analyzers, strict mappings, vector field types, and core index settings against live OpenSearch indices.
+
+Optional OpenSearch tuning env keys:
+
+```text
+OPENSEARCH_PRODUCT_INDEX=pepagora_products
+OPENSEARCH_KEYWORD_INDEX=pepagora_keyword_cluster
+OPENSEARCH_VECTOR_SPACE_TYPE=cosinesimil
+OPENSEARCH_VECTOR_EF_SEARCH=120
+OPENSEARCH_VECTOR_EF_CONSTRUCTION=128
+OPENSEARCH_VECTOR_M=24
 ```
 
 ## Benchmark
@@ -250,3 +332,4 @@ Gate output includes:
 - failed step list
 - rollout action (`promote`/`hold`/`rollback`)
 - artifact paths for baseline/canary regression + telemetry
+

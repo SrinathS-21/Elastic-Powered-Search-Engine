@@ -1,0 +1,2589 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PepaGora - Quick Post and Enrich</title>
+  <style>
+    :root {
+      --bg: #f3f4f6;
+      --card: #ffffff;
+      --line: #e5e7eb;
+      --text: #111827;
+      --muted: #6b7280;
+      --brand: #c0392b;
+      --brand-dark: #a93226;
+      --ok: #059669;
+      --ok-soft: #ecfdf5;
+      --ok-line: #86efac;
+      --warn: #b45309;
+      --warn-soft: #fffbeb;
+      --warn-line: #fcd34d;
+      --info: #1d4ed8;
+      --info-soft: #eff6ff;
+      --info-line: #bfdbfe;
+      --radius: 14px;
+      --shadow: 0 10px 30px rgba(17, 24, 39, 0.07);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .app {
+      max-width: 1080px;
+      margin: 0 auto;
+      display: grid;
+      gap: 14px;
+    }
+
+    .top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .top-meta {
+      display: grid;
+      gap: 8px;
+      justify-items: end;
+    }
+
+    .brand {
+      font-weight: 800;
+      color: var(--brand);
+      font-size: 1.2rem;
+      letter-spacing: 0.2px;
+    }
+
+    .top-note {
+      font-size: 0.86rem;
+      color: var(--muted);
+      text-align: right;
+    }
+
+    .backend-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .backend-label {
+      font-size: 0.8rem;
+      color: #6b7280;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .backend-select {
+      border: 1.5px solid #d1d5db;
+      border-radius: 9px;
+      background: #fff;
+      color: #1f2937;
+      font-size: 0.83rem;
+      font-weight: 600;
+      padding: 7px 10px;
+      min-width: 220px;
+      outline: none;
+      font-family: inherit;
+    }
+
+    .backend-select:focus {
+      border-color: #f87171;
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
+    }
+
+    .backend-pill {
+      border-radius: 999px;
+      border: 1px solid #fecaca;
+      background: #fff1f2;
+      color: #9f1239;
+      padding: 6px 10px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .backend-hint {
+      font-size: 0.8rem;
+      color: #64748b;
+      text-align: right;
+      line-height: 1.35;
+    }
+
+    .phase-bar {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .phase-item {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      transition: all 150ms ease;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    .phase-num {
+      width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      border: 1px solid #d1d5db;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.78rem;
+      background: #f9fafb;
+      flex-shrink: 0;
+    }
+
+    .phase-item.active {
+      border-color: #fca5a5;
+      color: var(--brand);
+      background: #fff7f7;
+    }
+
+    .phase-item.active .phase-num,
+    .phase-item.done .phase-num {
+      background: var(--brand);
+      color: #fff;
+      border-color: var(--brand);
+    }
+
+    .phase-item.done {
+      border-color: #bbf7d0;
+      color: var(--ok);
+      background: #f0fdf4;
+    }
+
+    .screen {
+      display: none;
+      gap: 14px;
+    }
+
+    .screen.show {
+      display: grid;
+      animation: fadeIn 220ms ease;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 20px;
+    }
+
+    .banner {
+      background: var(--info-soft);
+      border: 1px solid var(--info-line);
+      color: var(--info);
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 0.92rem;
+    }
+
+    .title {
+      margin: 0;
+      font-size: 1.45rem;
+      font-weight: 800;
+    }
+
+    .sub {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.5;
+    }
+
+    .field-group {
+      margin-top: 16px;
+    }
+
+    .label {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 700;
+      margin-bottom: 7px;
+      color: #374151;
+    }
+
+    .req {
+      color: var(--brand);
+    }
+
+    .field,
+    .select,
+    .textarea {
+      width: 100%;
+      border: 1.5px solid var(--line);
+      border-radius: 10px;
+      padding: 11px 12px;
+      font-size: 0.95rem;
+      outline: none;
+      background: #fff;
+      color: var(--text);
+      font-family: inherit;
+      transition: border-color 150ms ease, box-shadow 150ms ease;
+    }
+
+    .field:focus,
+    .select:focus,
+    .textarea:focus {
+      border-color: #f87171;
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
+    }
+
+    .field.auto {
+      border-color: #86efac;
+      background: #f0fdf4;
+      color: #14532d;
+      font-weight: 600;
+    }
+
+    .suggest-wrap {
+      position: relative;
+    }
+
+    .suggestions-drop {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      background: #fff;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 10px;
+      box-shadow: 0 12px 28px rgba(17, 24, 39, 0.1);
+      max-height: 260px;
+      overflow-y: auto;
+      z-index: 40;
+      display: none;
+    }
+
+    .suggestions-drop.show {
+      display: block;
+    }
+
+    .suggestion-item {
+      padding: 10px 12px;
+      font-size: 0.9rem;
+      color: #374151;
+      cursor: pointer;
+      border-bottom: 1px solid #f3f4f6;
+      transition: background-color 120ms ease;
+    }
+
+    .suggestion-item:last-child {
+      border-bottom: none;
+    }
+
+    .suggestion-item:hover,
+    .suggestion-item.active {
+      background: #fef2f2;
+      color: #7f1d1d;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 130px;
+      gap: 10px;
+    }
+
+    .hint {
+      margin-top: 7px;
+      font-size: 0.84rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .hint.ok {
+      color: var(--ok);
+    }
+
+    .link-btn {
+      border: none;
+      background: none;
+      color: var(--ok);
+      text-decoration: underline;
+      cursor: pointer;
+      font-weight: 700;
+      padding: 0;
+      font-size: 0.84rem;
+      font-family: inherit;
+    }
+
+    .status {
+      margin-top: 10px;
+      border-radius: 10px;
+      padding: 10px 12px;
+      border: 1px solid transparent;
+      font-size: 0.88rem;
+      line-height: 1.45;
+    }
+
+    .status.info {
+      background: var(--info-soft);
+      border-color: var(--info-line);
+      color: var(--info);
+    }
+
+    .status.ok {
+      background: var(--ok-soft);
+      border-color: var(--ok-line);
+      color: var(--ok);
+    }
+
+    .status.warn {
+      background: var(--warn-soft);
+      border-color: var(--warn-line);
+      color: var(--warn);
+    }
+
+    .status.error {
+      background: #fef2f2;
+      border-color: #fca5a5;
+      color: #b91c1c;
+    }
+
+    .status-inline {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .status-spinner {
+      width: 16px;
+      height: 16px;
+      border-radius: 999px;
+      border: 2px solid rgba(37, 99, 235, 0.22);
+      border-top-color: #2563eb;
+      animation: spin 0.85s linear infinite;
+      margin-top: 2px;
+      flex-shrink: 0;
+    }
+
+    .category-block {
+      display: none;
+    }
+
+    .category-choices {
+      margin-top: 9px;
+      display: none;
+      gap: 8px;
+      flex-direction: column;
+    }
+
+    .category-choices.show {
+      display: flex;
+    }
+
+    .choice-btn {
+      border: 1.5px solid #e5e7eb;
+      background: #fff;
+      color: #374151;
+      border-radius: 9px;
+      padding: 10px 11px;
+      text-align: left;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-family: inherit;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .choice-btn:hover {
+      border-color: #fca5a5;
+    }
+
+    .choice-btn.selected {
+      border-color: var(--brand);
+      background: #fef2f2;
+      color: #7f1d1d;
+    }
+
+    .choice-rank {
+      border-radius: 999px;
+      padding: 3px 8px;
+      border: 1px solid #fecaca;
+      background: #fff;
+      font-size: 0.74rem;
+      font-weight: 700;
+      color: var(--brand);
+      flex-shrink: 0;
+    }
+
+    .action-row {
+      margin-top: 18px;
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      border: none;
+      border-radius: 10px;
+      padding: 11px 18px;
+      font-size: 0.92rem;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      transition: transform 120ms ease, opacity 120ms ease;
+    }
+
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+    }
+
+    .btn.primary {
+      background: var(--brand);
+      color: #fff;
+    }
+
+    .btn.primary:hover:not(:disabled) {
+      background: var(--brand-dark);
+    }
+
+    .btn.secondary {
+      background: #fff;
+      border: 1.5px solid var(--line);
+      color: #374151;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      gap: 14px;
+      align-items: start;
+    }
+
+    .meta-card {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 14px;
+    }
+
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      border-bottom: 1px solid #f1f5f9;
+      padding: 8px 0;
+      font-size: 0.86rem;
+    }
+
+    .meta-row:last-child {
+      border-bottom: none;
+    }
+
+    .meta-k {
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .meta-v {
+      color: #111827;
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .attribute-grid {
+      margin-top: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .attribute-row {
+      padding: 4px 0;
+    }
+
+    .attribute-row.required-missing {
+      padding-left: 12px;
+      border-left: 3px solid rgba(192, 57, 43, 0.35);
+    }
+
+    .attribute-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+
+    .form-label {
+      font-size: 1.02rem;
+      font-weight: 700;
+      color: #1f3049;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .form-label .req {
+      color: var(--brand);
+      font-weight: 700;
+    }
+
+    .sub-label {
+      font-size: 0.88rem;
+      color: #6b7280;
+      font-weight: 500;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .value-control-stack {
+      display: grid;
+      gap: 8px;
+    }
+
+    .value-action-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .add-value-input {
+      min-width: 220px;
+      max-width: 320px;
+      flex: 1;
+    }
+
+    .chip-add-cancel {
+      border-style: solid;
+      color: #6b7280;
+    }
+
+    .chip {
+      padding: 7px 15px;
+      border-radius: 20px;
+      border: 1.5px solid #e5e7eb;
+      background: #fff;
+      font-size: 0.95rem;
+      color: #374151;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-weight: 500;
+      font-family: inherit;
+    }
+
+    .chip:hover {
+      border-color: #c0392b;
+      color: #c0392b;
+    }
+
+    .chip.on {
+      background: #fef2f2;
+      border-color: #c0392b;
+      color: #c0392b;
+      font-weight: 600;
+    }
+
+    .chip-add {
+      border-style: dashed;
+      color: #6b7280;
+      background: #fff;
+    }
+
+    .chip-add:hover {
+      border-color: #2563eb;
+      color: #1d4ed8;
+      background: #eff6ff;
+    }
+
+    .grid2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .range-inputs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      width: 100%;
+      column-gap: 12px;
+    }
+
+    .attr-input {
+      width: 100%;
+      border: 1.5px solid #d1d5db;
+      border-radius: 9px;
+      font-size: 0.95rem;
+      padding: 10px 13px;
+      font-family: inherit;
+      outline: none;
+      color: #1f2937;
+      background: #fff;
+    }
+
+    .attr-input:focus {
+      border-color: #f87171;
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
+    }
+
+    .custom-builder {
+      margin-top: 14px;
+      border: 1px dashed #d1d5db;
+      border-radius: 12px;
+      padding: 14px;
+      background: #fcfcfc;
+    }
+
+    .custom-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 8px;
+      align-items: end;
+    }
+
+    .mini-label {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 0.76rem;
+      color: var(--muted);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .range-label {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 0.82rem;
+      color: #9ca3af;
+      font-weight: 500;
+    }
+
+    .icon-btn {
+      border: 1px solid #fecaca;
+      background: #fff;
+      color: #b91c1c;
+      border-radius: 8px;
+      padding: 6px 8px;
+      font-size: 0.72rem;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .summary-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .summary-item {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #fff;
+      padding: 10px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 0.88rem;
+    }
+
+    .summary-key {
+      color: #374151;
+      font-weight: 700;
+    }
+
+    .summary-value {
+      color: #111827;
+      text-align: right;
+    }
+
+    @media (max-width: 920px) {
+      body {
+        padding: 12px;
+      }
+
+      .top {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .top-meta {
+        width: 100%;
+        justify-items: start;
+      }
+
+      .top-note,
+      .backend-hint {
+        text-align: left;
+      }
+
+      .backend-control {
+        justify-content: flex-start;
+      }
+
+      .backend-select {
+        width: min(100%, 340px);
+      }
+
+      .two-col {
+        grid-template-columns: 1fr;
+      }
+
+      .custom-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .phase-bar {
+        grid-template-columns: 1fr;
+      }
+
+      .row {
+        grid-template-columns: 1fr;
+      }
+
+      .range-inputs {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(4px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="app">
+    <header class="top">
+      <div class="brand">PepaGora</div>
+      <div class="top-meta">
+        <div class="top-note">Quick Post to Enrich workflow with category mapping + AI attributes</div>
+        <div class="backend-control">
+          <label class="backend-label" for="backendSelect">Search backend</label>
+          <select id="backendSelect" class="backend-select" aria-label="Search backend selector">
+            <option value="elasticsearch">Elasticsearch (port 9200)</option>
+            <option value="opensearch">OpenSearch (port 9201)</option>
+          </select>
+          <span id="backendBadge" class="backend-pill">Active: Elasticsearch</span>
+        </div>
+        <div id="backendHint" class="backend-hint">Switch backend to compare category mapping behavior instantly.</div>
+      </div>
+    </header>
+
+    <section class="phase-bar">
+      <div class="phase-item active" id="phase-1"><span class="phase-num">1</span>Quick Post</div>
+      <div class="phase-item" id="phase-2"><span class="phase-num">2</span>Enrich for Better Responses</div>
+      <div class="phase-item" id="phase-3"><span class="phase-num">3</span>Live & Receiving Quotes</div>
+    </section>
+
+    <section class="screen show" id="screen-quick">
+      <div class="banner">
+        <div>Welcome back. Start with the product name and we auto-map the best category.</div>
+      </div>
+
+      <article class="panel">
+        <h1 class="title">What are you looking for?</h1>
+        <div class="sub">Enter your product requirement. Category is auto-mapped from your existing mapping API.</div>
+
+        <div class="field-group">
+          <label class="label" for="productInput">Product Name <span class="req">*</span></label>
+          <div class="suggest-wrap">
+            <input id="productInput" class="field" type="text"
+              placeholder="e.g. Table Coaster, Hair Extensions, Steel Bottle" autocomplete="off" />
+            <div id="productSuggestions" class="suggestions-drop"></div>
+          </div>
+          <div id="mappingStatus" class="status info">Start typing — suggestions appear instantly. Press <strong>Enter</strong> or click a suggestion to map the category.</div>
+        </div>
+
+        <div id="categoryBlock" class="field-group category-block">
+          <label class="label" for="categoryInput">Category <span class="req">*</span></label>
+          <input id="categoryInput" class="field auto" type="text" readonly />
+          <div class="hint ok">Auto-matched.
+            <button id="toggleChoicesBtn" class="link-btn" type="button">Change</button>
+          </div>
+          <div id="categoryChoices" class="category-choices"></div>
+        </div>
+
+        <div class="field-group">
+          <label class="label" for="quantityInput">Quantity Required <span class="req">*</span></label>
+          <div class="row">
+            <input id="quantityInput" class="field" type="number" min="1" value="1000" />
+            <select id="unitInput" class="select">
+              <option>Pieces</option>
+              <option>Sets</option>
+              <option>Kilograms</option>
+              <option>Bundles</option>
+              <option>Meters</option>
+            </select>
+          </div>
+          <div id="quantityHint" class="hint"></div>
+        </div>
+
+        <div class="action-row">
+          <button id="postRequestBtn" class="btn primary" type="button" disabled>Post Buy Request</button>
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2 class="title" style="font-size:1.1rem;">What Happens Next</h2>
+        <div class="sub">1) Request saved instantly. 2) Enrich with AI suggested attributes. 3) Publish and receive
+          better-matched quotes.</div>
+      </article>
+    </section>
+
+    <section class="screen" id="screen-enrich">
+      <article class="panel">
+        <h1 class="title">Enrich for Better Responses</h1>
+        <div class="sub" id="enrichHeadline">AI-generated attributes based on your product and mapped category.</div>
+        <div id="attributeStatus" class="status info">Smart attributes will appear here in a few seconds.</div>
+
+        <div class="attribute-grid" id="aiAttributeGrid"></div>
+
+        <div class="attribute-grid" id="customAttributeGrid"></div>
+
+        <div class="custom-builder">
+          <div class="label" style="margin-bottom:10px;">Add Custom Attribute</div>
+          <div class="hint" style="margin-top:-4px;margin-bottom:10px;">Custom attributes use multi-select values by
+            default.</div>
+          <div class="custom-grid">
+            <div>
+              <label class="mini-label" for="customAttrName">Attribute Name</label>
+              <input id="customAttrName" class="field" type="text" placeholder="e.g. Packaging Type" />
+            </div>
+            <div>
+              <label class="mini-label" for="customAttrValues">Values (comma separated)</label>
+              <input id="customAttrValues" class="field" type="text" placeholder="Box Packed, Shrink Wrapped" />
+            </div>
+            <button id="addCustomAttrBtn" class="btn secondary" type="button">Add Attribute</button>
+          </div>
+        </div>
+
+        <div class="action-row" style="justify-content:space-between;">
+          <button id="backToQuickBtn" class="btn secondary" type="button">Back</button>
+          <button id="publishBtn" class="btn primary" type="button">Publish Buy Request</button>
+        </div>
+      </article>
+
+      <aside class="meta-card">
+        <div class="meta-row">
+          <div class="meta-k">Product</div>
+          <div class="meta-v" id="metaProduct">-</div>
+        </div>
+        <div class="meta-row">
+          <div class="meta-k">Category</div>
+          <div class="meta-v" id="metaCategory">-</div>
+        </div>
+        <div class="meta-row">
+          <div class="meta-k">Quantity</div>
+          <div class="meta-v" id="metaQuantity">-</div>
+        </div>
+        <div class="meta-row">
+          <div class="meta-k">Selected Attribute Values</div>
+          <div class="meta-v" id="metaSelections">0</div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="screen" id="screen-live">
+      <article class="panel">
+        <h1 class="title">Request Is Live</h1>
+        <div class="sub">Your buy request is now ready for matching sellers. Selected enriched attributes are included
+          below.</div>
+
+        <div class="summary-list">
+          <div class="summary-item">
+            <div class="summary-key">Product</div>
+            <div class="summary-value" id="liveProduct">-</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-key">Category</div>
+            <div class="summary-value" id="liveCategory">-</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-key">Quantity</div>
+            <div class="summary-value" id="liveQuantity">-</div>
+          </div>
+        </div>
+
+        <div class="label" style="margin-top:14px;">Selected Attributes</div>
+        <div id="liveAttributeSummary" class="summary-list"></div>
+
+        <div class="action-row">
+          <button id="startOverBtn" class="btn secondary" type="button">Start New Request</button>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const els = {
+      phase1: document.getElementById("phase-1"),
+      phase2: document.getElementById("phase-2"),
+      phase3: document.getElementById("phase-3"),
+      quick: document.getElementById("screen-quick"),
+      enrich: document.getElementById("screen-enrich"),
+      live: document.getElementById("screen-live"),
+      productInput: document.getElementById("productInput"),
+      productSuggestions: document.getElementById("productSuggestions"),
+      mappingStatus: document.getElementById("mappingStatus"),
+      categoryBlock: document.getElementById("categoryBlock"),
+      categoryInput: document.getElementById("categoryInput"),
+      toggleChoicesBtn: document.getElementById("toggleChoicesBtn"),
+      categoryChoices: document.getElementById("categoryChoices"),
+      quantityInput: document.getElementById("quantityInput"),
+      unitInput: document.getElementById("unitInput"),
+      quantityHint: document.getElementById("quantityHint"),
+      postRequestBtn: document.getElementById("postRequestBtn"),
+      enrichHeadline: document.getElementById("enrichHeadline"),
+      attributeStatus: document.getElementById("attributeStatus"),
+      aiAttributeGrid: document.getElementById("aiAttributeGrid"),
+      customAttributeGrid: document.getElementById("customAttributeGrid"),
+      customAttrName: document.getElementById("customAttrName"),
+      customAttrValues: document.getElementById("customAttrValues"),
+      addCustomAttrBtn: document.getElementById("addCustomAttrBtn"),
+      backToQuickBtn: document.getElementById("backToQuickBtn"),
+      publishBtn: document.getElementById("publishBtn"),
+      metaProduct: document.getElementById("metaProduct"),
+      metaCategory: document.getElementById("metaCategory"),
+      metaQuantity: document.getElementById("metaQuantity"),
+      metaSelections: document.getElementById("metaSelections"),
+      liveProduct: document.getElementById("liveProduct"),
+      liveCategory: document.getElementById("liveCategory"),
+      liveQuantity: document.getElementById("liveQuantity"),
+      liveAttributeSummary: document.getElementById("liveAttributeSummary"),
+      startOverBtn: document.getElementById("startOverBtn"),
+      backendSelect: document.getElementById("backendSelect"),
+      backendBadge: document.getElementById("backendBadge"),
+      backendHint: document.getElementById("backendHint"),
+    };
+
+    const state = {
+      phase: 1,
+      productName: "",
+      quantity: 1000,
+      unit: "Pieces",
+      categoryOptions: [],
+      selectedCategory: "",
+      selectedCategoryMain: "",
+      selectedCategorySub: "",
+      selectedCategoryProduct: "",
+      selectedCategoryIndex: 0,
+      aiAttributes: [],
+      customAttributes: [],
+      selections: {},
+      mappingDecision: "",
+      mapDebounceId: null,
+      mapRequestController: null,
+      suggestions: [],
+      suggestionActiveIndex: -1,
+      addValueEditorKey: "",
+      addValueEditorDraft: "",
+      backend: "opensearch",
+    };
+
+    let API_BASE_URL = "";
+    const BACKEND_STORAGE_KEY = "pepagora.quick-post.backend";
+    const SUPPORTED_BACKENDS = ["elasticsearch", "opensearch"];
+    let availableBackends = new Set(SUPPORTED_BACKENDS);
+
+    function parseBackendCandidate(value) {
+      const normalized = String(value || "").trim().toLowerCase();
+      if (!normalized) {
+        return null;
+      }
+      return SUPPORTED_BACKENDS.includes(normalized) ? normalized : null;
+    }
+
+    function normalizeBackend(value) {
+      return parseBackendCandidate(value) || "elasticsearch";
+    }
+
+    function backendLabel(backend) {
+      return normalizeBackend(backend) === "opensearch" ? "OpenSearch" : "Elasticsearch";
+    }
+
+    function parseAvailableBackends(payload) {
+      const listed = Array.isArray(payload?.available_backends)
+        ? payload.available_backends.map(parseBackendCandidate).filter(Boolean)
+        : [];
+      if (listed.length) {
+        return Array.from(new Set(listed));
+      }
+
+      const status = payload?.backend_availability;
+      if (status && typeof status === "object") {
+        const derived = SUPPORTED_BACKENDS.filter((backend) => Boolean(status?.[backend]?.available));
+        return derived;
+      }
+
+      return SUPPORTED_BACKENDS.slice();
+    }
+
+    function resolveAvailableBackend(preferredBackend) {
+      const candidate = parseBackendCandidate(preferredBackend);
+      if (candidate && availableBackends.has(candidate)) {
+        return candidate;
+      }
+
+      for (const backend of SUPPORTED_BACKENDS) {
+        if (availableBackends.has(backend)) {
+          return backend;
+        }
+      }
+
+      return candidate || "elasticsearch";
+    }
+
+    function applyBackendAvailability(availableList) {
+      const hasExplicitList = Array.isArray(availableList);
+      const normalized = (availableList || []).map(parseBackendCandidate).filter(Boolean);
+      availableBackends = new Set(
+        hasExplicitList
+          ? normalized
+          : (normalized.length ? normalized : SUPPORTED_BACKENDS)
+      );
+
+      if (!els.backendSelect) {
+        return;
+      }
+
+      const options = Array.from(els.backendSelect.options || []);
+      let selectableCount = 0;
+      for (const option of options) {
+        const backend = parseBackendCandidate(option.value);
+        if (!option.dataset.baseLabel) {
+          option.dataset.baseLabel = option.textContent;
+        }
+
+        const isAvailable = Boolean(backend && availableBackends.has(backend));
+        option.disabled = !isAvailable;
+        option.textContent = isAvailable
+          ? option.dataset.baseLabel
+          : `${option.dataset.baseLabel} (Unavailable)`;
+        if (isAvailable) {
+          selectableCount += 1;
+        }
+      }
+
+      els.backendSelect.disabled = selectableCount <= 1;
+    }
+
+    function setBackendBadge(backend) {
+      const label = backendLabel(backend);
+      if (els.backendBadge) {
+        els.backendBadge.textContent = `Active: ${label}`;
+      }
+    }
+
+    function setBackendHint(message) {
+      if (els.backendHint) {
+        els.backendHint.textContent = message;
+      }
+    }
+
+    function persistBackend(backend) {
+      try {
+        window.localStorage.setItem(BACKEND_STORAGE_KEY, normalizeBackend(backend));
+      } catch {
+        // Ignore storage restrictions.
+      }
+    }
+
+    function loadPersistedBackend() {
+      try {
+        return parseBackendCandidate(window.localStorage.getItem(BACKEND_STORAGE_KEY));
+      } catch {
+        return null;
+      }
+    }
+
+    function syncBackendFromResponse(response) {
+      const responseBackend = parseBackendCandidate(response?.headers?.get("x-search-backend"));
+      const fallbackFrom = parseBackendCandidate(response?.headers?.get("x-search-backend-fallback-from"));
+      const fallbackTo = parseBackendCandidate(response?.headers?.get("x-search-backend-fallback-to"));
+      if (!responseBackend) {
+        return;
+      }
+
+      state.backend = responseBackend;
+      availableBackends.add(responseBackend);
+      if (els.backendSelect) {
+        els.backendSelect.value = responseBackend;
+      }
+      setBackendBadge(responseBackend);
+      persistBackend(responseBackend);
+      if (fallbackFrom && fallbackTo) {
+        setBackendHint(`${backendLabel(fallbackFrom)} unavailable right now. Using ${backendLabel(fallbackTo)}.`);
+      }
+    }
+
+    function normalizeApiBaseUrl(value) {
+      return String(value || "").trim().replace(/\/+$/, "");
+    }
+
+    async function configureApiBaseUrl() {
+      if (window.location.protocol === "file:") {
+        throw new Error("UI must be served by API host so runtime config can be loaded from .env.");
+      }
+
+      const response = await fetch("/ui-api/runtime-config", { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`Runtime config request failed (${response.status}).`);
+      }
+
+      const payload = await response.json();
+      const configuredBase = normalizeApiBaseUrl(payload?.api_base_url);
+      if (!configuredBase) {
+        throw new Error("Runtime config returned empty api_base_url.");
+      }
+
+      API_BASE_URL = configuredBase;
+      const reachableBackends = parseAvailableBackends(payload);
+      applyBackendAvailability(reachableBackends);
+
+      const queryBackend = parseBackendCandidate(new URLSearchParams(window.location.search).get("backend"));
+      const savedBackend = loadPersistedBackend();
+      const runtimeBackend = parseBackendCandidate(payload?.active_backend || payload?.default_backend);
+      state.backend = resolveAvailableBackend(queryBackend || savedBackend || runtimeBackend || "elasticsearch");
+
+      if (els.backendSelect) {
+        els.backendSelect.value = state.backend;
+      }
+      setBackendBadge(state.backend);
+      persistBackend(state.backend);
+      const reachableCount = reachableBackends.filter((backend) => availableBackends.has(backend)).length;
+      if (reachableCount <= 0) {
+        setBackendHint("No search backend is reachable right now. Please check backend connectivity.");
+      } else if (reachableCount === 1) {
+        setBackendHint(`Only ${backendLabel(state.backend)} is reachable right now.`);
+      } else {
+        setBackendHint(`Using ${backendLabel(state.backend)} for quick-post requests.`);
+      }
+    }
+
+    function apiUrl(path) {
+      const normalizedPath = String(path || "");
+      const separator = normalizedPath.includes("?") ? "&" : "?";
+      return `${API_BASE_URL}${normalizedPath}${separator}backend=${encodeURIComponent(state.backend)}`;
+    }
+
+    async function applyBackendSelection() {
+      const selectedBackend = normalizeBackend(els.backendSelect?.value);
+      if (!availableBackends.has(selectedBackend)) {
+        setBackendHint(`${backendLabel(selectedBackend)} is currently unavailable.`);
+        return;
+      }
+
+      const backendChanged = selectedBackend !== state.backend;
+
+      state.backend = selectedBackend;
+      setBackendBadge(state.backend);
+      persistBackend(state.backend);
+      setBackendHint(
+        backendChanged
+          ? `Switched to ${backendLabel(state.backend)}. Refreshing mapping context...`
+          : `Using ${backendLabel(state.backend)} for quick-post requests.`
+      );
+
+      if (!backendChanged) {
+        return;
+      }
+
+      const typed = String(els.productInput.value || "").trim();
+      if (typed.length >= 2) {
+        await mapProductCategory(typed);
+      }
+
+      if (state.phase === 2 && state.productName && state.selectedCategory) {
+        await loadAiAttributes();
+      }
+
+      setBackendHint(`Using ${backendLabel(state.backend)} for quick-post requests.`);
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function setStatus(element, type, message, options = {}) {
+      const allowHtml = Boolean(options && options.allowHtml);
+      element.className = `status ${type}`;
+      if (allowHtml) {
+        element.innerHTML = message;
+      } else {
+        element.textContent = message;
+      }
+    }
+
+    function showAttributeLoadingStatus() {
+      setStatus(
+        els.attributeStatus,
+        "info",
+        `<span class="status-inline"><span class="status-spinner" aria-hidden="true"></span><span><strong>Preparing smart attributes...</strong><br/>We are analyzing your product and mapped category to build the most relevant fields. This usually takes a few seconds.</span></span>`,
+        { allowHtml: true }
+      );
+    }
+
+    function closeSuggestions() {
+      state.suggestions = [];
+      state.suggestionActiveIndex = -1;
+      els.productSuggestions.classList.remove("show");
+      els.productSuggestions.innerHTML = "";
+    }
+
+    function renderSuggestions() {
+      if (!state.suggestions.length) {
+        closeSuggestions();
+        return;
+      }
+
+      els.productSuggestions.innerHTML = state.suggestions
+        .map((value, index) => {
+          const activeClass = index === state.suggestionActiveIndex ? "active" : "";
+          return `<div class="suggestion-item ${activeClass}" data-suggestion-index="${index}">${escapeHtml(value)}</div>`;
+        })
+        .join("");
+
+      els.productSuggestions.classList.add("show");
+    }
+
+    async function fetchProductSuggestions(query) {
+      const normalized = String(query || "").trim();
+      if (normalized.length < 2) {
+        closeSuggestions();
+        return;
+      }
+
+      try {
+        const response = await fetch(apiUrl(`/ui-api/suggestions?q=${encodeURIComponent(normalized)}&limit=8`));
+        syncBackendFromResponse(response);
+        if (!response.ok) {
+          throw new Error(`Suggestion request failed (${response.status})`);
+        }
+
+        const data = await response.json();
+        const freshText = String(els.productInput.value || "").trim();
+        if (freshText !== normalized) {
+          return;
+        }
+
+        state.suggestions = Array.isArray(data.suggestions) ? data.suggestions.slice(0, 8) : [];
+        state.suggestionActiveIndex = -1;
+        renderSuggestions();
+      } catch {
+        closeSuggestions();
+      }
+    }
+
+    async function applySuggestion(value) {
+      const selected = String(value || "").trim();
+      if (!selected) {
+        return;
+      }
+
+      if (state.mapDebounceId) {
+        clearTimeout(state.mapDebounceId);
+        state.mapDebounceId = null;
+      }
+
+      els.productInput.value = selected;
+      state.productName = selected;
+      closeSuggestions();
+      await mapProductCategory(selected);
+      updateQuickReadiness();
+    }
+
+    async function applyTypedProduct() {
+      const typed = String(els.productInput.value || "").trim();
+      if (!typed) {
+        return;
+      }
+
+      if (state.mapDebounceId) {
+        clearTimeout(state.mapDebounceId);
+        state.mapDebounceId = null;
+      }
+
+      state.productName = typed;
+      closeSuggestions();
+      await mapProductCategory(typed);
+      updateQuickReadiness();
+    }
+
+    function deriveCategoryParts(card) {
+      const main = String(card?.category_name || "").trim();
+      const sub = String(card?.sub_category_name || "").trim();
+      const product = String(card?.product_category_name || "").trim();
+
+      if (main || sub || product) {
+        return { main, sub, product };
+      }
+
+      const parts = String(card?.breadcrumb || "")
+        .split(">>")
+        .map((part) => part.trim())
+        .filter(Boolean);
+
+      return {
+        main: parts[0] || "",
+        sub: parts[1] || "",
+        product: parts[2] || parts[parts.length - 1] || "",
+      };
+    }
+
+    function setPhase(phase) {
+      state.phase = phase;
+
+      [els.quick, els.enrich, els.live].forEach((screen) => screen.classList.remove("show"));
+      [els.phase1, els.phase2, els.phase3].forEach((item) => item.classList.remove("active", "done"));
+
+      if (phase === 1) {
+        els.quick.classList.add("show");
+        els.phase1.classList.add("active");
+      } else if (phase === 2) {
+        els.enrich.classList.add("show");
+        els.phase1.classList.add("done");
+        els.phase2.classList.add("active");
+      } else {
+        els.live.classList.add("show");
+        els.phase1.classList.add("done");
+        els.phase2.classList.add("done");
+        els.phase3.classList.add("active");
+      }
+
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function updateQuickReadiness() {
+      const product = (els.productInput.value || "").trim();
+      const quantity = Number(els.quantityInput.value || 0);
+      const ready = product.length >= 2 && quantity > 0 && !!state.selectedCategory;
+      els.postRequestBtn.disabled = !ready;
+
+      if (quantity > 0) {
+        if (quantity < 100) {
+          els.quantityHint.textContent = "Small order: mention if this is a trial order before scale-up.";
+        } else if (quantity <= 2000) {
+          els.quantityHint.textContent = "Good volume: attracts mid-to-large suppliers.";
+        } else {
+          els.quantityHint.textContent = "Large volume: enterprise suppliers will prioritize this request.";
+        }
+      } else {
+        els.quantityHint.textContent = "";
+      }
+    }
+
+    function renderCategoryChoices() {
+      if (!state.categoryOptions.length) {
+        els.categoryChoices.innerHTML = "";
+        return;
+      }
+
+      els.categoryChoices.innerHTML = state.categoryOptions
+        .map((card, index) => {
+          const selectedClass = index === state.selectedCategoryIndex ? "selected" : "";
+          const rankScore = Number(card.rank_score || card.confidence || 0);
+          const confidence = Number(card.confidence || 0);
+          const label = `Top ${index + 1}`;
+          return `
+            <button type="button" class="choice-btn ${selectedClass}" data-choice-index="${index}">
+              <span>${escapeHtml(card.breadcrumb || "Unknown category")}</span>
+              <span class="choice-rank">${escapeHtml(label)} · Rank ${escapeHtml((rankScore * 100).toFixed(1))}% · Conf ${escapeHtml((confidence * 100).toFixed(1))}%</span>
+            </button>
+          `;
+        })
+        .join("");
+    }
+
+    function pickCategoryChoice(index) {
+      const selected = state.categoryOptions[index];
+      if (!selected) {
+        return;
+      }
+
+      state.selectedCategoryIndex = index;
+      state.selectedCategory = String(selected.breadcrumb || "").trim();
+      const parts = deriveCategoryParts(selected);
+      state.selectedCategoryMain = parts.main;
+      state.selectedCategorySub = parts.sub;
+      state.selectedCategoryProduct = parts.product;
+      els.categoryInput.value = state.selectedCategory;
+      renderCategoryChoices();
+      updateQuickReadiness();
+      const selectedRank = Number(selected.rank_score || selected.confidence || 0);
+      const selectedConfidence = Number(selected.confidence || 0);
+      setStatus(
+        els.mappingStatus,
+        "ok",
+        `Category selected: ${state.selectedCategory} (rank ${(selectedRank * 100).toFixed(1)}%, confidence ${(selectedConfidence * 100).toFixed(1)}%).`
+      );
+    }
+
+    async function mapProductCategory(query) {
+      const normalized = String(query || "").trim();
+      if (normalized.length < 3) {
+        if (state.mapRequestController) {
+          state.mapRequestController.abort();
+          state.mapRequestController = null;
+        }
+        state.categoryOptions = [];
+        state.selectedCategory = "";
+        state.selectedCategoryMain = "";
+        state.selectedCategorySub = "";
+        state.selectedCategoryProduct = "";
+        state.selectedCategoryIndex = 0;
+        els.categoryBlock.style.display = "none";
+        els.categoryChoices.classList.remove("show");
+        setStatus(els.mappingStatus, "info", "Keep typing (min 3 characters) to map the best category.");
+        updateQuickReadiness();
+        return;
+      }
+
+      setStatus(els.mappingStatus, "info", "Mapping product to categories...");
+
+      if (state.mapRequestController) {
+        state.mapRequestController.abort();
+      }
+      const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+      state.mapRequestController = controller;
+
+      try {
+        const response = await fetch(
+          apiUrl(`/ui-api/map-category?q=${encodeURIComponent(normalized)}&max_cards=3`),
+          controller ? { signal: controller.signal } : undefined
+        );
+        if (controller && state.mapRequestController !== controller) {
+          return;
+        }
+        syncBackendFromResponse(response);
+        if (!response.ok) {
+          throw new Error(`Category mapping failed (${response.status})`);
+        }
+
+        const data = await response.json();
+        const freshText = String(els.productInput.value || "").trim();
+        if (freshText !== normalized) {
+          return;
+        }
+        const cards = Array.isArray(data.cards) ? data.cards : [];
+
+        if (!cards.length) {
+          state.categoryOptions = [];
+          state.selectedCategory = "";
+          state.selectedCategoryMain = "";
+          state.selectedCategorySub = "";
+          state.selectedCategoryProduct = "";
+          els.categoryBlock.style.display = "none";
+          setStatus(els.mappingStatus, "warn", "No mapped category found. Try a more specific product name.");
+          updateQuickReadiness();
+          return;
+        }
+
+        state.categoryOptions = cards.slice(0, 3);
+        state.mappingDecision = String(data.decision || "");
+        state.selectedCategoryIndex = 0;
+        state.selectedCategory = String(state.categoryOptions[0].breadcrumb || "").trim();
+        const topParts = deriveCategoryParts(state.categoryOptions[0]);
+        state.selectedCategoryMain = topParts.main;
+        state.selectedCategorySub = topParts.sub;
+        state.selectedCategoryProduct = topParts.product;
+
+        els.categoryInput.value = state.selectedCategory;
+        els.categoryBlock.style.display = "block";
+        renderCategoryChoices();
+
+        const decision = String(state.mappingDecision || "").toLowerCase();
+        const decisionLabel = state.mappingDecision ? `Decision: ${state.mappingDecision}. ` : "";
+        let decisionMessage = "Top suggestions ready. Use Change to pick top 2 or top 3 suggestions.";
+        if (decision === "auto_map") {
+          decisionMessage = "Auto-mapped top category. Use Change to pick top 2 or top 3 suggestions.";
+        } else if (decision === "confirm") {
+          decisionMessage = "Top category looks strong. Confirm or use Change to pick top 2 or top 3 suggestions.";
+        } else if (decision === "options") {
+          decisionMessage = "Ambiguous intent detected. Review and select the best category from top suggestions.";
+        }
+        setStatus(
+          els.mappingStatus,
+          "ok",
+          `${decisionLabel}${decisionMessage}`
+        );
+        updateQuickReadiness();
+      } catch (error) {
+        if (error && error.name === "AbortError") {
+          return;
+        }
+        state.categoryOptions = [];
+        state.selectedCategory = "";
+        state.selectedCategoryMain = "";
+        state.selectedCategorySub = "";
+        state.selectedCategoryProduct = "";
+        els.categoryBlock.style.display = "none";
+        setStatus(els.mappingStatus, "error", `Unable to map category: ${error.message}`);
+        updateQuickReadiness();
+      } finally {
+        if (state.mapRequestController === controller) {
+          state.mapRequestController = null;
+        }
+      }
+    }
+
+    function attrKey(kind, id) {
+      return `${kind}:${id}`;
+    }
+
+    function isCustomAttributeKey(key) {
+      return String(key || "").startsWith("custom:");
+    }
+
+    function allAttributes() {
+      return [
+        ...state.aiAttributes.map((item, index) => ({ ...item, _key: attrKey("ai", index), _kind: "ai", _index: index })),
+        ...state.customAttributes.map((item) => ({ ...item, _key: attrKey("custom", item.id), _kind: "custom", _index: item.id })),
+      ];
+    }
+
+    function getAttributeByKey(key) {
+      if (!key) {
+        return null;
+      }
+      const [kind, raw] = String(key).split(":");
+      if (kind === "ai") {
+        return state.aiAttributes[Number(raw)] || null;
+      }
+      if (kind === "custom") {
+        return state.customAttributes.find((item) => String(item.id) === String(raw)) || null;
+      }
+      return null;
+    }
+
+    function getSelectionList(key) {
+      const values = state.selections[key];
+      if (!Array.isArray(values)) {
+        return [];
+      }
+      return values.map((value) => String(value || "").trim());
+    }
+
+    function isAttributeRequired(item) {
+      if (!item) {
+        return false;
+      }
+
+      if (typeof item.required === "boolean") {
+        return item.required;
+      }
+
+      return String(item.importance || "").trim().toLowerCase() === "high";
+    }
+
+    function hasSelectionValues(key) {
+      return getSelectionList(key).some((value) => Boolean(String(value || "").trim()));
+    }
+
+    function getMissingRequiredAttributes() {
+      return allAttributes().filter((attribute) => isAttributeRequired(attribute) && !hasSelectionValues(attribute._key));
+    }
+
+    function setSelectionList(key, values) {
+      state.selections[key] = Array.isArray(values)
+        ? values.map((value) => String(value || "").trim())
+        : [];
+      refreshMetaSummary();
+    }
+
+    function normalizeOptionList(item) {
+      if (!item) {
+        return [];
+      }
+
+      const source = Array.isArray(item.example_values)
+        ? item.example_values
+        : Array.isArray(item.values)
+          ? item.values
+          : Array.isArray(item.options)
+            ? item.options
+            : [];
+
+      return source
+        .map((value) => {
+          if (value && typeof value === "object") {
+            return String(value.value || value.label || value.name || "").trim();
+          }
+          return String(value || "").trim();
+        })
+        .filter(Boolean)
+        .filter((value, index, list) => list.findIndex((x) => x.toLowerCase() === value.toLowerCase()) === index)
+        .slice(0, 12);
+    }
+
+    function resolveControlType(item, key = "") {
+      const explicit = String(item?.input_type || item?.control_type || "")
+        .trim()
+        .toLowerCase()
+        .replace(/-/g, "_")
+        .replace(/\s+/g, "_");
+
+      const options = normalizeOptionList(item);
+      const name = String(item?.name || "").trim().toLowerCase();
+
+      if (isCustomAttributeKey(key)) {
+        return options.length ? "multi_select" : "text";
+      }
+
+      if (explicit === "range" || explicit === "min_max" || explicit === "between") {
+        return "range";
+      }
+      if (explicit === "text" || explicit === "free_text" || explicit === "textarea") {
+        return "text";
+      }
+      if (explicit === "number" || explicit === "numeric") {
+        return "number";
+      }
+      if (explicit === "single" || explicit === "single_select" || explicit === "select" || explicit === "dropdown" || explicit === "radio") {
+        return "single_select";
+      }
+      if (explicit === "multi" || explicit === "multiple" || explicit === "multi_select" || explicit === "checkbox") {
+        return "multi_select";
+      }
+      if (explicit === "chips" || explicit === "pill" || explicit === "pills") {
+        return item?.allow_multiple ? "multi_select" : "chips";
+      }
+
+      if (name.includes("range") && options.length >= 2) {
+        return "range";
+      }
+      if (item?.allow_multiple) {
+        return "multi_select";
+      }
+      if (options.length >= 7) {
+        return "single_select";
+      }
+      if (options.length) {
+        return "chips";
+      }
+      return "text";
+    }
+
+    function renderSelectOptions(options, selectedValue) {
+      return options
+        .map((value) => {
+          const selectedAttr = value === selectedValue ? " selected" : "";
+          return `<option value="${escapeHtml(value)}"${selectedAttr}>${escapeHtml(value)}</option>`;
+        })
+        .join("");
+    }
+
+    function renderAddValueInline(key) {
+      if (state.addValueEditorKey === key) {
+        return `
+          <input
+            type="text"
+            class="attr-input add-value-input"
+            data-add-value-input-key="${escapeHtml(key)}"
+            value="${escapeHtml(state.addValueEditorDraft)}"
+            placeholder="Type value and press Enter"
+          />
+          <button type="button" class="chip chip-add-cancel" data-cancel-add-value-key="${escapeHtml(key)}">Cancel</button>
+        `;
+      }
+
+      return `<button type="button" class="chip chip-add" data-add-value-key="${escapeHtml(key)}">+ Add Value</button>`;
+    }
+
+    function renderAddValueAction(key) {
+      return `<div class="value-action-row">${renderAddValueInline(key)}</div>`;
+    }
+
+    function renderValueControl(item, key) {
+      const options = normalizeOptionList(item);
+      const selectedValues = getSelectionList(key);
+      const controlType = resolveControlType(item, key);
+
+      if (controlType === "range" && options.length >= 2) {
+        const minValue = selectedValues[0] || "";
+        const maxValue = selectedValues[1] || "";
+        return {
+          html: `
+            <div class="value-control-stack">
+              <div class="range-inputs">
+                <div>
+                  <label class="range-label">Minimum</label>
+                  <select class="attr-input" data-range-key="${escapeHtml(key)}" data-range-role="min">
+                    <option value="">Select minimum</option>
+                    ${renderSelectOptions(options, minValue)}
+                  </select>
+                </div>
+                <div>
+                  <label class="range-label">Maximum</label>
+                  <select class="attr-input" data-range-key="${escapeHtml(key)}" data-range-role="max">
+                    <option value="">Select maximum</option>
+                    ${renderSelectOptions(options, maxValue)}
+                  </select>
+                </div>
+              </div>
+              ${renderAddValueAction(key)}
+            </div>
+          `,
+        };
+      }
+
+      if (controlType === "single_select" && options.length >= 6) {
+        const selected = selectedValues[0] || "";
+        return {
+          html: `
+            <div class="value-control-stack">
+              <select class="attr-input" data-select-key="${escapeHtml(key)}">
+                <option value="">Select a value</option>
+                ${renderSelectOptions(options, selected)}
+              </select>
+              ${renderAddValueAction(key)}
+            </div>
+          `,
+        };
+      }
+
+      if (controlType === "text" || controlType === "number") {
+        const current = selectedValues[0] || "";
+        const placeholder = String(item.placeholder || "Enter value").trim() || "Enter value";
+        const type = controlType === "number" ? "number" : "text";
+        return {
+          html: `<div class="value-control-stack"><input class="attr-input" type="${type}" data-freeform-key="${escapeHtml(key)}" value="${escapeHtml(current)}" placeholder="${escapeHtml(placeholder)}" />${renderAddValueAction(key)}</div>`,
+        };
+      }
+
+      if (!options.length) {
+        return {
+          html: `<div class="value-control-stack"><div class="hint">No suggested values from AI. Add a custom value for this attribute.</div>${renderAddValueAction(key)}</div>`,
+        };
+      }
+
+      const selectedSet = new Set(selectedValues);
+      const chipsHtml = options
+        .map((value) => {
+          const activeClass = selectedSet.has(value) ? "on" : "";
+          return `<button type="button" class="chip ${activeClass}" data-value-key="${escapeHtml(key)}" data-value="${escapeHtml(value)}">${escapeHtml(value)}</button>`;
+        })
+        .join("");
+
+      return {
+        html: `<div class="chips">${chipsHtml}${renderAddValueInline(key)}</div>`,
+      };
+    }
+
+    function formatSelectionForSummary(attribute, values) {
+      const normalized = Array.isArray(values)
+        ? values.map((value) => String(value || "").trim()).filter(Boolean)
+        : [];
+      if (!normalized.length) {
+        return [];
+      }
+
+      if (resolveControlType(attribute, attribute?._key || "") === "range" && normalized.length >= 2) {
+        return [`${normalized[0]} to ${normalized[1]}`];
+      }
+
+      return normalized;
+    }
+
+    function toggleValueSelection(key, value) {
+      const attribute = getAttributeByKey(key);
+      if (!attribute) {
+        return;
+      }
+
+      const selected = new Set(getSelectionList(key));
+      const allowMultiple = isCustomAttributeKey(key) ? true : Boolean(attribute.allow_multiple);
+      if (allowMultiple) {
+        if (selected.has(value)) {
+          selected.delete(value);
+        } else {
+          selected.add(value);
+        }
+      } else {
+        if (selected.has(value)) {
+          selected.clear();
+        } else {
+          selected.clear();
+          selected.add(value);
+        }
+      }
+
+      setSelectionList(key, Array.from(selected));
+      renderAllAttributes();
+    }
+
+    function addCustomValueToAttribute(key, rawValue) {
+      const attribute = getAttributeByKey(key);
+      if (!attribute) {
+        return;
+      }
+
+      const value = String(rawValue || "").trim();
+      if (!value) {
+        setStatus(els.attributeStatus, "warn", "Enter a valid value before adding.");
+        return;
+      }
+
+      const existing = normalizeOptionList(attribute);
+      const exists = existing.some((item) => item.toLowerCase() === value.toLowerCase());
+      const updated = exists ? existing : [...existing, value];
+      attribute.example_values = updated;
+      attribute.values = updated;
+
+      if (resolveControlType(attribute, key) === "range") {
+        setSelectionList(key, [value, value]);
+      } else if (isCustomAttributeKey(key) || attribute.allow_multiple) {
+        const selected = new Set(getSelectionList(key).filter(Boolean));
+        selected.add(value);
+        setSelectionList(key, Array.from(selected));
+      } else {
+        setSelectionList(key, [value]);
+      }
+
+      state.addValueEditorKey = "";
+      state.addValueEditorDraft = "";
+
+      renderAllAttributes();
+      setStatus(
+        els.attributeStatus,
+        "ok",
+        exists
+          ? `Value \"${value}\" is now available under ${attribute.name}.`
+          : `Added \"${value}\" to ${attribute.name}.`
+      );
+    }
+
+    function startAddValueEditor(key) {
+      const attribute = getAttributeByKey(key);
+      if (!attribute) {
+        return;
+      }
+
+      state.addValueEditorKey = key;
+      state.addValueEditorDraft = "";
+      renderAllAttributes();
+
+      const input = Array.from(document.querySelectorAll("[data-add-value-input-key]"))
+        .find(
+          (node) =>
+            node instanceof HTMLInputElement &&
+            String(node.getAttribute("data-add-value-input-key") || "") === key
+        );
+      if (input instanceof HTMLInputElement) {
+        input.focus();
+      }
+    }
+
+    function cancelAddValueEditor(key) {
+      if (key && state.addValueEditorKey !== key) {
+        return;
+      }
+
+      state.addValueEditorKey = "";
+      state.addValueEditorDraft = "";
+      renderAllAttributes();
+    }
+
+    function submitAddValueEditor(key) {
+      if (!key) {
+        return;
+      }
+
+      const value = String(state.addValueEditorDraft || "").trim();
+      addCustomValueToAttribute(key, value);
+    }
+
+    function requestAddValueForAttribute(key) {
+      startAddValueEditor(key);
+    }
+
+    function resetAddValueEditorState() {
+      state.addValueEditorKey = "";
+      state.addValueEditorDraft = "";
+    }
+
+    function ensureAddValueEditorForExistingKey() {
+      if (!state.addValueEditorKey) {
+        return;
+      }
+
+      const existing = getAttributeByKey(state.addValueEditorKey);
+      if (!existing) {
+        resetAddValueEditorState();
+      }
+    }
+
+    function renderAttributeCards(attributes, targetElement, kind) {
+      if (!attributes.length) {
+        targetElement.innerHTML = "";
+        return;
+      }
+
+      targetElement.innerHTML = attributes
+        .map((item, index) => {
+          const key = kind === "ai" ? attrKey("ai", index) : attrKey("custom", item.id);
+          const control = renderValueControl(item, key);
+          const isRequired = isAttributeRequired(item);
+          const isMissingRequired = isRequired && !hasSelectionValues(key);
+          const sellerHint = kind === "ai" && index === 0 ? "Most cited by sellers" : "";
+
+          const removeButton = kind === "custom"
+            ? `<button type="button" class="icon-btn" data-remove-custom="${escapeHtml(String(item.id))}">Remove</button>`
+            : "";
+
+          return `
+            <article class="attribute-row${isMissingRequired ? " required-missing" : ""}">
+              <div class="attribute-header">
+                <div class="form-label">
+                  ${escapeHtml(item.name || "Unnamed attribute")}
+                  ${isRequired ? '<span class="req">*</span>' : ""}
+                  ${sellerHint ? `<span class="sub-label">— ${escapeHtml(sellerHint)}</span>` : ""}
+                </div>
+                ${removeButton}
+              </div>
+              ${control.html}
+            </article>
+          `;
+        })
+        .join("");
+    }
+
+    function renderAllAttributes() {
+      renderAttributeCards(state.aiAttributes, els.aiAttributeGrid, "ai");
+      renderAttributeCards(state.customAttributes, els.customAttributeGrid, "custom");
+    }
+
+    function refreshMetaSummary() {
+      const quantityLabel = `${Number(els.quantityInput.value || 0)} ${els.unitInput.value}`;
+      els.metaProduct.textContent = state.productName || "-";
+      els.metaCategory.textContent = state.selectedCategory || "-";
+      els.metaQuantity.textContent = quantityLabel;
+
+      const selectedCount = Object.values(state.selections)
+        .reduce(
+          (sum, values) => sum + (Array.isArray(values) ? values.map((v) => String(v || "").trim()).filter(Boolean).length : 0),
+          0
+        );
+      els.metaSelections.textContent = String(selectedCount);
+
+      const missingRequired = getMissingRequiredAttributes();
+      const publishReady = state.phase !== 2 || missingRequired.length === 0;
+      els.publishBtn.disabled = !publishReady;
+      els.publishBtn.title = missingRequired.length
+        ? `Select ${missingRequired.length} required attribute${missingRequired.length === 1 ? "" : "s"} before publishing.`
+        : "";
+    }
+
+    async function loadAiAttributes() {
+      showAttributeLoadingStatus();
+      state.aiAttributes = [];
+      state.customAttributes = [];
+      state.selections = {};
+      resetAddValueEditorState();
+      renderAllAttributes();
+      refreshMetaSummary();
+
+      try {
+        const response = await fetch(
+          apiUrl(
+            `/ui-api/attributes?q=${encodeURIComponent(state.productName)}&category=${encodeURIComponent(state.selectedCategory)}&main_category=${encodeURIComponent(state.selectedCategoryMain)}&sub_category=${encodeURIComponent(state.selectedCategorySub)}&product_category=${encodeURIComponent(state.selectedCategoryProduct)}`
+          )
+        );
+        syncBackendFromResponse(response);
+
+        if (!response.ok) {
+          throw new Error(`Attribute generation failed (${response.status})`);
+        }
+
+        const data = await response.json();
+        const responseError = String(data.error || "").trim();
+        const responseMessage = String(data.message || "").trim();
+        const fallbackUsed = Boolean(data.fallback_used);
+        const rawAttributes = Array.isArray(data.attributes) ? data.attributes : [];
+
+        state.aiAttributes = rawAttributes.map((item) => {
+          const inputType = String(item.input_type || item.control_type || item.field_type || item.selection_type || "")
+            .trim()
+            .toLowerCase();
+          const allowMultiple = typeof item.allow_multiple === "boolean"
+            ? item.allow_multiple
+            : ["multiple", "multi", "multi_select"].includes(
+              String(item.selection_type || item.selection_mode || "").trim().toLowerCase()
+            ) ||
+            ["multiple", "multi", "multi_select", "checkbox"].includes(inputType);
+
+          return {
+            name: String(item.name || item.attribute_name || "").trim(),
+            importance: String(item.importance || "medium").trim().toLowerCase(),
+            allow_multiple: allowMultiple,
+            input_type: inputType,
+            placeholder: String(item.placeholder || "").trim(),
+            example_values: normalizeOptionList(item),
+            reason: String(item.reason || "").trim(),
+          };
+        }).filter((item) => item.name);
+
+        state.aiAttributes.forEach((_, index) => {
+          state.selections[attrKey("ai", index)] = [];
+        });
+
+        renderAllAttributes();
+        refreshMetaSummary();
+
+        if (!state.aiAttributes.length) {
+          setStatus(
+            els.attributeStatus,
+            responseError ? "error" : "warn",
+            responseMessage || "No attributes were generated. Add custom attributes below."
+          );
+          return;
+        }
+
+        if (fallbackUsed || !data.configured) {
+          setStatus(
+            els.attributeStatus,
+            "warn",
+            responseMessage || `Showing ${state.aiAttributes.length} fallback attributes based on product/category context.`
+          );
+          return;
+        }
+
+        if (responseError) {
+          setStatus(
+            els.attributeStatus,
+            "warn",
+            responseMessage || `OpenAI returned an issue (${responseError}). Attributes were still rendered when available.`
+          );
+          return;
+        }
+
+        setStatus(
+          els.attributeStatus,
+          "ok",
+          `Your smart attributes are ready. Choose the values that matter most to get faster and more accurate supplier quotes.`
+        );
+      } catch (error) {
+        setStatus(els.attributeStatus, "error", `Unable to generate attributes: ${error.message}`);
+      }
+    }
+
+    function addCustomAttribute() {
+      const name = String(els.customAttrName.value || "").trim();
+      const values = String(els.customAttrValues.value || "")
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .slice(0, 10);
+      const allowMultiple = true;
+
+      if (!name) {
+        setStatus(els.attributeStatus, "warn", "Enter a custom attribute name.");
+        return;
+      }
+      if (!values.length) {
+        setStatus(els.attributeStatus, "warn", "Enter at least one custom value (comma separated).");
+        return;
+      }
+
+      const id = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      state.customAttributes.push({
+        id,
+        name,
+        importance: "medium",
+        required: false,
+        allow_multiple: allowMultiple,
+        input_type: allowMultiple ? "multi_select" : "chips",
+        example_values: values,
+        values,
+        reason: "Custom attribute added by buyer.",
+      });
+      state.selections[attrKey("custom", id)] = Array.from(new Set(values));
+
+      els.customAttrName.value = "";
+      els.customAttrValues.value = "";
+
+      renderAllAttributes();
+      refreshMetaSummary();
+      setStatus(els.attributeStatus, "ok", `Custom attribute added and selected: ${name}`);
+    }
+
+    function removeCustomAttribute(id) {
+      state.customAttributes = state.customAttributes.filter((item) => String(item.id) !== String(id));
+      delete state.selections[attrKey("custom", id)];
+      ensureAddValueEditorForExistingKey();
+      renderAllAttributes();
+      refreshMetaSummary();
+    }
+
+    function publishRequest() {
+      const missingRequired = getMissingRequiredAttributes();
+      if (missingRequired.length) {
+        setStatus(
+          els.attributeStatus,
+          "error",
+          `Select the required attribute${missingRequired.length === 1 ? "" : "s"} before publishing: ${missingRequired.map((item) => item.name).join(", ")}.`
+        );
+        renderAllAttributes();
+        refreshMetaSummary();
+        return;
+      }
+
+      const attrs = allAttributes();
+      const selected = attrs
+        .map((attr) => ({
+          name: attr.name,
+          values: formatSelectionForSummary(attr, state.selections[attr._key] || []),
+        }))
+        .filter((item) => item.values.length > 0);
+
+      els.liveProduct.textContent = state.productName || "-";
+      els.liveCategory.textContent = state.selectedCategory || "-";
+      els.liveQuantity.textContent = `${Number(els.quantityInput.value || 0)} ${els.unitInput.value}`;
+
+      if (!selected.length) {
+        els.liveAttributeSummary.innerHTML = `
+          <div class="summary-item">
+            <div class="summary-key">No attribute values selected</div>
+            <div class="summary-value">You can still publish and refine later.</div>
+          </div>
+        `;
+      } else {
+        els.liveAttributeSummary.innerHTML = selected
+          .map((item) => `
+            <div class="summary-item">
+              <div class="summary-key">${escapeHtml(item.name)}</div>
+              <div class="summary-value">${escapeHtml(item.values.join(", "))}</div>
+            </div>
+          `)
+          .join("");
+      }
+
+      setPhase(3);
+    }
+
+    function startOver() {
+      if (state.mapRequestController) {
+        state.mapRequestController.abort();
+        state.mapRequestController = null;
+      }
+
+      state.productName = "";
+      state.quantity = 1000;
+      state.unit = "Pieces";
+      state.categoryOptions = [];
+      state.selectedCategory = "";
+      state.selectedCategoryMain = "";
+      state.selectedCategorySub = "";
+      state.selectedCategoryProduct = "";
+      state.selectedCategoryIndex = 0;
+      state.aiAttributes = [];
+      state.customAttributes = [];
+      state.selections = {};
+      state.mappingDecision = "";
+      resetAddValueEditorState();
+
+      els.productInput.value = "";
+      els.quantityInput.value = "1000";
+      els.unitInput.value = "Pieces";
+      els.categoryInput.value = "";
+      els.categoryBlock.style.display = "none";
+      els.categoryChoices.classList.remove("show");
+      els.aiAttributeGrid.innerHTML = "";
+      els.customAttributeGrid.innerHTML = "";
+
+      setStatus(els.mappingStatus, "info", "Start typing product name to map category.");
+      setStatus(
+        els.attributeStatus,
+        "info",
+        "Smart attributes will be prepared in the next step based on product and category context."
+      );
+      updateQuickReadiness();
+      refreshMetaSummary();
+      setPhase(1);
+    }
+
+    // Tracks the 5-second idle timer for auto-triggering mapping
+    let mapIdleTimerId = null;
+    let suggestionDebounceId = null;
+    let lastMappedQuery = "";
+
+    function resetIdleMapTimer(query) {
+      if (mapIdleTimerId) clearTimeout(mapIdleTimerId);
+      mapIdleTimerId = setTimeout(async () => {
+        const current = String(els.productInput.value || "").trim();
+        if (current.length >= 3 && current !== lastMappedQuery) {
+          lastMappedQuery = current;
+          await mapProductCategory(current);
+          updateQuickReadiness();
+        }
+      }, 5000);
+    }
+
+    els.productInput.addEventListener("input", () => {
+      state.productName = String(els.productInput.value || "").trim();
+
+      // Suggestions: fast debounce (300ms)
+      if (suggestionDebounceId) clearTimeout(suggestionDebounceId);
+      suggestionDebounceId = setTimeout(() => {
+        fetchProductSuggestions(state.productName);
+      }, 300);
+
+      // Mapping: only fires on Enter/click/5s idle — NOT on every keystroke
+      // Start/reset the 5-second idle timer
+      resetIdleMapTimer(state.productName);
+
+      updateQuickReadiness();
+    });
+
+    els.productInput.addEventListener("focus", () => {
+      if (state.suggestions.length) {
+        els.productSuggestions.classList.add("show");
+      }
+    });
+
+    els.productInput.addEventListener("keydown", async (event) => {
+      if (event.key === "ArrowDown") {
+        if (!state.suggestions.length) return;
+        event.preventDefault();
+        state.suggestionActiveIndex = (state.suggestionActiveIndex + 1) % state.suggestions.length;
+        renderSuggestions();
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        if (!state.suggestions.length) return;
+        event.preventDefault();
+        state.suggestionActiveIndex = (state.suggestionActiveIndex - 1 + state.suggestions.length) % state.suggestions.length;
+        renderSuggestions();
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        // Cancel the 5s idle timer — we're mapping now
+        if (mapIdleTimerId) { clearTimeout(mapIdleTimerId); mapIdleTimerId = null; }
+        if (suggestionDebounceId) { clearTimeout(suggestionDebounceId); suggestionDebounceId = null; }
+        const typed = String(els.productInput.value || "").trim();
+        if (state.suggestions.length && state.suggestionActiveIndex >= 0) {
+          lastMappedQuery = state.suggestions[state.suggestionActiveIndex];
+          await applySuggestion(state.suggestions[state.suggestionActiveIndex]);
+        } else {
+          lastMappedQuery = typed;
+          await applyTypedProduct();
+        }
+        return;
+      }
+      if (event.key === "Escape") {
+        closeSuggestions();
+      }
+    });
+
+    els.productSuggestions.addEventListener("click", async (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const row = target.closest("[data-suggestion-index]");
+      if (!row) return;
+      // Cancel idle timer — mapping fires immediately from suggestion click
+      if (mapIdleTimerId) { clearTimeout(mapIdleTimerId); mapIdleTimerId = null; }
+      if (suggestionDebounceId) { clearTimeout(suggestionDebounceId); suggestionDebounceId = null; }
+      const index = Number(row.getAttribute("data-suggestion-index"));
+      const picked = state.suggestions[index] || "";
+      lastMappedQuery = picked;
+      await applySuggestion(picked);
+    });
+
+    els.quantityInput.addEventListener("input", updateQuickReadiness);
+    els.unitInput.addEventListener("change", refreshMetaSummary);
+
+    els.toggleChoicesBtn.addEventListener("click", () => {
+      els.categoryChoices.classList.toggle("show");
+    });
+
+    els.categoryChoices.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+      const button = target.closest("[data-choice-index]");
+      if (!button) {
+        return;
+      }
+      const index = Number(button.getAttribute("data-choice-index"));
+      pickCategoryChoice(index);
+      els.categoryChoices.classList.remove("show");
+    });
+
+    document.addEventListener("change", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+
+      if (target instanceof HTMLSelectElement && target.hasAttribute("data-select-key")) {
+        const key = String(target.getAttribute("data-select-key") || "");
+        setSelectionList(key, target.value ? [target.value] : []);
+        return;
+      }
+
+      if (target instanceof HTMLSelectElement && target.hasAttribute("data-range-key")) {
+        const key = String(target.getAttribute("data-range-key") || "");
+        const controls = Array.from(document.querySelectorAll("[data-range-key]"))
+          .filter(
+            (node) =>
+              node instanceof HTMLSelectElement &&
+              String(node.getAttribute("data-range-key") || "") === key
+          );
+
+        let minValue = "";
+        let maxValue = "";
+        controls.forEach((node) => {
+          const role = String(node.getAttribute("data-range-role") || "");
+          if (role === "min") {
+            minValue = String(node.value || "").trim();
+          }
+          if (role === "max") {
+            maxValue = String(node.value || "").trim();
+          }
+        });
+
+        const attribute = getAttributeByKey(key);
+        const options = normalizeOptionList(attribute);
+        if (minValue && maxValue && options.length) {
+          const minIndex = options.indexOf(minValue);
+          const maxIndex = options.indexOf(maxValue);
+          if (minIndex >= 0 && maxIndex >= 0 && minIndex > maxIndex) {
+            if (String(target.getAttribute("data-range-role") || "") === "min") {
+              maxValue = minValue;
+              controls.forEach((node) => {
+                if (String(node.getAttribute("data-range-role") || "") === "max") {
+                  node.value = maxValue;
+                }
+              });
+            } else {
+              minValue = maxValue;
+              controls.forEach((node) => {
+                if (String(node.getAttribute("data-range-role") || "") === "min") {
+                  node.value = minValue;
+                }
+              });
+            }
+          }
+        }
+
+        setSelectionList(key, [minValue, maxValue]);
+      }
+    });
+
+    document.addEventListener("input", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) {
+        return;
+      }
+
+      if (target.hasAttribute("data-add-value-input-key")) {
+        const key = String(target.getAttribute("data-add-value-input-key") || "");
+        if (state.addValueEditorKey === key) {
+          state.addValueEditorDraft = String(target.value || "");
+        }
+        return;
+      }
+
+      if (!target.hasAttribute("data-freeform-key")) {
+        return;
+      }
+
+      const key = String(target.getAttribute("data-freeform-key") || "");
+      const value = String(target.value || "").trim();
+      setSelectionList(key, value ? [value] : []);
+    });
+
+    document.addEventListener("keydown", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) {
+        return;
+      }
+      if (!target.hasAttribute("data-add-value-input-key")) {
+        return;
+      }
+
+      const key = String(target.getAttribute("data-add-value-input-key") || "");
+      state.addValueEditorDraft = String(target.value || "");
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        submitAddValueEditor(key);
+        return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cancelAddValueEditor(key);
+      }
+    });
+
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+
+      const inSuggestWrap = !!target.closest(".suggest-wrap");
+      if (!inSuggestWrap) {
+        closeSuggestions();
+      }
+
+      const addValueButton = target.closest("[data-add-value-key]");
+      if (addValueButton) {
+        const key = String(addValueButton.getAttribute("data-add-value-key") || "");
+        requestAddValueForAttribute(key);
+        return;
+      }
+
+      const cancelAddValueButton = target.closest("[data-cancel-add-value-key]");
+      if (cancelAddValueButton) {
+        const key = String(cancelAddValueButton.getAttribute("data-cancel-add-value-key") || "");
+        cancelAddValueEditor(key);
+        return;
+      }
+
+      const valueButton = target.closest("[data-value-key][data-value]");
+      if (valueButton) {
+        const key = String(valueButton.getAttribute("data-value-key") || "");
+        const value = String(valueButton.getAttribute("data-value") || "");
+        toggleValueSelection(key, value);
+        return;
+      }
+
+      const removeButton = target.closest("[data-remove-custom]");
+      if (removeButton) {
+        const id = String(removeButton.getAttribute("data-remove-custom") || "");
+        removeCustomAttribute(id);
+      }
+    });
+
+    els.postRequestBtn.addEventListener("click", async () => {
+      state.productName = String(els.productInput.value || "").trim();
+      state.quantity = Number(els.quantityInput.value || 0);
+      state.unit = els.unitInput.value;
+
+      els.enrichHeadline.textContent = `AI-generated attributes for ${state.productName} in ${state.selectedCategory}.`;
+      refreshMetaSummary();
+      setPhase(2);
+      await loadAiAttributes();
+    });
+
+    els.backToQuickBtn.addEventListener("click", () => {
+      setPhase(1);
+    });
+
+    els.addCustomAttrBtn.addEventListener("click", addCustomAttribute);
+    const addCustomOnEnter = (event) => {
+      if (event.key !== "Enter") {
+        return;
+      }
+      event.preventDefault();
+      addCustomAttribute();
+    };
+    els.customAttrName.addEventListener("keydown", addCustomOnEnter);
+    els.customAttrValues.addEventListener("keydown", addCustomOnEnter);
+    els.publishBtn.addEventListener("click", publishRequest);
+    els.startOverBtn.addEventListener("click", startOver);
+    els.backendSelect.addEventListener("change", () => {
+      applyBackendSelection().catch((error) => {
+        setBackendHint(`Backend switch failed: ${error.message}`);
+      });
+    });
+
+    (async () => {
+      try {
+        await configureApiBaseUrl();
+        updateQuickReadiness();
+        refreshMetaSummary();
+      } catch (error) {
+        setStatus(els.mappingStatus, "error", `Runtime config error: ${error.message}`);
+      }
+
+      // Lazy backend-status check (runs after page is ready, does network pings)
+      try {
+        const statusResp = await fetch("/ui-api/backend-status", { cache: "no-store" });
+        if (statusResp.ok) {
+          const statusData = await statusResp.json();
+          const liveBackend = parseBackendCandidate(statusData?.active_backend);
+          const available = Array.isArray(statusData?.available_backends) ? statusData.available_backends : [];
+          applyBackendAvailability(available);
+          if (liveBackend) {
+            state.backend = liveBackend;
+            if (els.backendSelect) els.backendSelect.value = liveBackend;
+            setBackendBadge(liveBackend);
+            persistBackend(liveBackend);
+          }
+          if (available.length) {
+            setBackendHint(`Backend ready. Available: ${available.map(backendLabel).join(", ")}.`);
+          }
+        }
+      } catch {
+        // Backend status is optional — silently ignore.
+      }
+    })();
+  </script>
+</body>
+
+</html>

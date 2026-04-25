@@ -1,7 +1,6 @@
-version: '2.2'
 services:
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
     container_name: es01
     environment:
       - discovery.type=single-node
@@ -12,5 +11,20 @@ services:
     volumes:
       - es_data:/usr/share/elasticsearch/data
 
+  opensearch-node:
+    image: opensearchproject/opensearch:3.6.0
+    container_name: opensearch-node
+    environment:
+      - discovery.type=single-node
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      - DISABLE_SECURITY_PLUGIN=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9201:9200"
+      - "9601:9600"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+
 volumes:
   es_data:
+  opensearch-data:

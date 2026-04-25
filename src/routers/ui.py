@@ -1,25 +1,24 @@
+"""Web UI and configuration API routes.
+
+Serves HTML pages, configuration APIs, and runtime metadata for the web interface.
+Includes backend status and index information endpoints.
+"""
+
 from __future__ import annotations
 
+import os
 import time
 from typing import Optional
 
 from fastapi import APIRouter, Query
 from fastapi.responses import FileResponse
 
-try:
-    from ..core.config import INDEX_NAME, KEYWORD_INDEX, UI_DIR
-    from ..services.internal.common import index_doc_count, index_exists, sample_hierarchy_cards
-    from ..services.mapping import current_thresholds, map_query_to_categories
-    from ..services.internal.suggestions import fetch_keyword_suggestions
-    from ..services.suppliers import supplier_doc_count, supplier_enrichment_enabled, supplier_index_exists
-    from ..services.synonyms import expand_synonyms
-except ImportError:
-    from core.config import INDEX_NAME, KEYWORD_INDEX, UI_DIR
-    from services.internal.common import index_doc_count, index_exists, sample_hierarchy_cards
-    from services.mapping import current_thresholds, map_query_to_categories
-    from services.internal.suggestions import fetch_keyword_suggestions
-    from services.suppliers import supplier_doc_count, supplier_enrichment_enabled, supplier_index_exists
-    from services.synonyms import expand_synonyms
+from src.core.clients import active_search_backend, backend_availability, first_available_backend
+from src.core.config import APP_HOST, APP_PORT, APP_SCHEME, INDEX_NAME, KEYWORD_INDEX, UI_API_BASE_URL, UI_DIR
+from src.services.internal.common import sample_hierarchy_cards
+from src.services.internal.query_insights import track_query_event
+from src.services.internal.suggestions import fetch_keyword_suggestions
+from src.services.mapping import map_query_to_categories
 
 router = APIRouter()
 
@@ -32,47 +31,76 @@ def root_info():
     return {
         "service": "pepagora-search-api",
         "message": "API is running. HTML UI file not found.",
-        "endpoints": ["/ui-api/snapshot", "/ui-api/suggestions", "/ui-api/hierarchy", "/search", "/quality/benchmark"],
+        "endpoints": ["/ui-api/runtime-config", "/ui-api/backend-status", "/ui-api/suggestions", "/ui-api/map-category"],
     }
 
 
-@router.get("/ui-api/snapshot")
-def ui_data_snapshot():
-    start = time.perf_counter()
-    try:
-        products_exists = index_exists(INDEX_NAME)
-        keywords_exists = index_exists(KEYWORD_INDEX)
-        products = index_doc_count(INDEX_NAME, known_exists=products_exists)
-        keywords = index_doc_count(KEYWORD_INDEX, known_exists=keywords_exists)
+@router.get("/pbr-quick-post-enrich.html", include_in_schema=False)
+def ui_quick_post_enrich():
+    pbr_file = UI_DIR / "pbr-quick-post-enrich.html"
+    if pbr_file.exists():
+        return FileResponse(pbr_file, media_type="text/html")
+    return {
+        "error": "pbr-quick-post-enrich.html not found",
+        "available_at": "/ui/pbr-quick-post-enrich.html",
+    }
 
-        suppliers_enabled = supplier_enrichment_enabled()
-        suppliers_exists = supplier_index_exists() if suppliers_enabled else False
-        suppliers = supplier_doc_count() if suppliers_exists else 0
 
-        return {
-            "products": products,
-            "keywords": keywords,
-            "suppliers": suppliers,
-            "suppliers_feature_enabled": suppliers_enabled,
-            "products_index_exists": products_exists,
-            "keywords_index_exists": keywords_exists,
-            "suppliers_index_exists": suppliers_exists,
-            "data_source": "elasticsearch",
-            "latency_ms": round((time.perf_counter() - start) * 1000, 1),
-        }
-    except Exception as exc:
-        return {
-            "products": 0,
-            "keywords": 0,
-            "suppliers": 0,
-            "suppliers_feature_enabled": False,
-            "products_index_exists": False,
-            "keywords_index_exists": False,
-            "suppliers_index_exists": False,
-            "data_source": "fallback",
-            "error": str(exc),
-            "latency_ms": round((time.perf_counter() - start) * 1000, 1),
-        }
+@router.get("/pbr-complete-journey-v4.html", include_in_schema=False)
+def ui_complete_journey():
+    pbr_file = UI_DIR / "pbr-complete-journey-v4.html"
+    if pbr_file.exists():
+        return FileResponse(pbr_file, media_type="text/html")
+    return {
+        "error": "pbr-complete-journey-v4.html not found",
+        "available_at": "/ui/pbr-complete-journey-v4.html",
+    }
+
+
+@router.get("/ui-api/runtime-config")
+def ui_runtime_config():
+    """Returns API base URL and configured backend — no live health checks, always fast."""
+    if UI_API_BASE_URL:
+        api_base_url = UI_API_BASE_URL
+        source = "UI_API_BASE_URL"
+    else:
+        api_base_url = f"{APP_SCHEME}://{APP_HOST}:{APP_PORT}"
+        source = "APP_SCHEME+APP_HOST+APP_PORT"
+
+    # Read directly from env — no live backend pings here so this stays <5ms.
+    configured_default_backend = (os.getenv("SEARCH_BACKEND", "elasticsearch").strip().lower() or "elasticsearch")
+
+    return {
+        "api_base_url": api_base_url,
+        "api_host": APP_HOST,
+        "api_port": APP_PORT,
+        "source": source,
+        "default_backend": configured_default_backend,
+        "active_backend": configured_default_backend,
+        "backend_query_param": "backend",
+        # Availability is intentionally omitted here — call /ui-api/backend-status for that.
+        "available_backends": [configured_default_backend],
+        "backend_availability": {},
+    }
+
+
+@router.get("/ui-api/backend-status")
+def ui_backend_status():
+    """Returns live backend availability. Slower (does real network pings). Call lazily."""
+    availability = backend_availability()
+    preferred_backend = active_search_backend()
+    active_backend = first_available_backend(preferred_backend=preferred_backend) or preferred_backend
+    available_backends = [
+        backend_name
+        for backend_name, status in availability.items()
+        if bool(status.get("available"))
+    ]
+    return {
+        "active_backend": active_backend,
+        "available_backends": available_backends,
+        "backend_availability": availability,
+    }
+
 
 
 @router.get("/ui-api/suggestions")
@@ -82,6 +110,7 @@ def ui_keyword_suggestions(
 ):
     start = time.perf_counter()
     suggestions = fetch_keyword_suggestions(q, limit=limit)
+    track_query_event(q, endpoint="/ui-api/suggestions", query_kind="suggestions")
     return {
         "query": q,
         "suggestions": suggestions,
@@ -98,46 +127,6 @@ def ui_keyword_suggestions(
     }
 
 
-@router.get("/ui-api/hierarchy")
-def ui_hierarchy_mapping(
-    keyword: str = Query(..., min_length=2),
-    max_cards: int = Query(default=3, ge=1, le=6),
-    selected_term: bool = Query(default=True),
-):
-    start = time.perf_counter()
-    mapping = map_query_to_categories(
-        query_text=keyword,
-        selected_suggestion=keyword if selected_term else None,
-        max_cards=max_cards,
-        emit_telemetry=False,
-    )
-    cards = mapping.get("cards") or sample_hierarchy_cards(keyword, max_cards=max_cards)
-    return {
-        "keyword": keyword,
-        "expanded_keyword": expand_synonyms(keyword) or keyword,
-        "ranking_order": [
-            "lexical_clusters_with_reliability",
-            "semantic_cluster_fallback",
-            "product_vote_fallback",
-        ],
-        "decision": mapping.get("decision", "options"),
-        "confidence": mapping.get("confidence", 0.0),
-        "margin": mapping.get("margin", 0.0),
-        "needs_confirmation": mapping.get("needs_confirmation", False),
-        "auto_mapped": mapping.get("auto_mapped", False),
-        "intent_query": mapping.get("intent_query", ""),
-        "lanes_used": mapping.get("lanes_used", []),
-        "semantic_used": mapping.get("semantic_used", False),
-        "product_fallback_used": mapping.get("product_fallback_used", False),
-        "phase3_active": mapping.get("phase3_active", False),
-        "alerts": mapping.get("alerts", []),
-        "cards": cards,
-        "matched_docs": mapping.get("matched_clusters", 0),
-        "latency_ms": round((time.perf_counter() - start) * 1000, 1),
-        "count": len(cards),
-    }
-
-
 @router.get("/ui-api/map-category")
 def ui_map_category(
     q: str = Query(..., min_length=2),
@@ -145,6 +134,8 @@ def ui_map_category(
     max_cards: int = Query(default=3, ge=1, le=6),
 ):
     start = time.perf_counter()
+    tracked_query = selected or q
+    track_query_event(tracked_query, endpoint="/ui-api/map-category", query_kind="map_category")
     mapping = map_query_to_categories(
         query_text=q,
         selected_suggestion=selected,
@@ -173,6 +164,5 @@ def ui_map_category(
         "product_fallback_used": mapping.get("product_fallback_used", False),
         "phase3_active": mapping.get("phase3_active", False),
         "alerts": mapping.get("alerts", []),
-        "thresholds": current_thresholds(),
         "latency_ms": round((time.perf_counter() - start) * 1000, 1),
     }

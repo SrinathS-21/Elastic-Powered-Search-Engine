@@ -1,39 +1,29 @@
+"""FastAPI application lifespan manager.
+
+Handles pre-warming of runtime dependencies (embedding service) at application startup
+to ensure all services are ready before processing requests.
+"""
+
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from .clients import es
-from .config import SUPPLIER_ENRICHMENT_ENABLED, SUPPLIER_INDEX
+from .embedding_client import EMBED_DIM, EMBED_MODEL_NAME, EMBEDDING_API_URL, get_embed_model
 from .logger import log
-
-try:
-    from ..ml.embeddings import EMBED_DIM, EMBED_MODEL_NAME, get_embed_model
-except ImportError:
-    try:
-        from ml.embeddings import EMBED_DIM, EMBED_MODEL_NAME, get_embed_model
-    except ImportError:
-        from src.ml.embeddings import EMBED_DIM, EMBED_MODEL_NAME, get_embed_model
 
 
 @asynccontextmanager
 async def lifespan(_app):
     """Pre-warm runtime dependencies at startup."""
     try:
-        if SUPPLIER_ENRICHMENT_ENABLED and SUPPLIER_INDEX.strip():
-            if es.indices.exists(index=SUPPLIER_INDEX):
-                count = es.count(index=SUPPLIER_INDEX)["count"]
-                log.info("Supplier index '%s': %s suppliers ready", SUPPLIER_INDEX, f"{count:,}")
-            else:
-                log.warning("Supplier index '%s' not found", SUPPLIER_INDEX)
-        else:
-            log.info("Supplier enrichment disabled; skipping supplier index checks")
+        meta = get_embed_model()
+        log.info(
+            "Embedding service reachable (%s, %s dims) at %s",
+            meta.get("model_name") or EMBED_MODEL_NAME,
+            meta.get("dim") or EMBED_DIM,
+            EMBEDDING_API_URL,
+        )
     except Exception as exc:
-        log.warning("Elasticsearch unavailable at startup: %s", exc)
-
-    try:
-        get_embed_model()
-        log.info("Embedding model loaded (%s, %s dims)", EMBED_MODEL_NAME, EMBED_DIM)
-    except Exception as exc:
-        log.warning("Embedding model unavailable at startup, semantic mode disabled: %s", exc)
+        log.warning("Embedding service unavailable at startup (%s), semantic mode disabled: %s", EMBEDDING_API_URL, exc)
 
     yield

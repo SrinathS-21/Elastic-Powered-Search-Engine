@@ -1,13 +1,15 @@
+"""Common utility functions for text and index operations.
+
+Provides helper functions for text handling, index operations, sample hierarchy
+generation, and document counting.
+"""
+
 from __future__ import annotations
 
 from typing import Any
 
-try:
-    from ...core.clients import es
-    from ...core.config import SAMPLE_KEYWORD_MAP
-except ImportError:
-    from core.clients import es
-    from core.config import SAMPLE_KEYWORD_MAP
+from src.core.clients import es
+from src.core.config import SAMPLE_KEYWORD_MAP
 
 
 def as_text(value: Any) -> str:

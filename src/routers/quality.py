@@ -1,11 +1,14 @@
+"""Quality benchmark API routes for search evaluation.
+
+Provides endpoints for evaluating search quality across different query modes
+and predefined/custom query sets with relevance metrics.
+"""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
-try:
-    from ..services.benchmark import benchmark_query_set, run_quality_benchmark
-except ImportError:
-    from services.benchmark import benchmark_query_set, run_quality_benchmark
+from src.services.benchmark import benchmark_query_set, run_quality_benchmark
 
 router = APIRouter()
 

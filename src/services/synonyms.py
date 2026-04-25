@@ -1,17 +1,15 @@
+"""Synonym expansion and token coverage analysis.
+
+Expands queries with synonyms and analyzes token coverage for improved search recall.
+"""
+
 from __future__ import annotations
 
 import math
 from functools import lru_cache
 
-try:
-    from ..core.synonym_data import load_synonym_map
-except ImportError:
-    from core.synonym_data import load_synonym_map
-
-try:
-    from .internal.query_text import canonical_token_list
-except ImportError:
-    from services.internal.query_text import canonical_token_list
+from src.core.synonym_data import load_synonym_map
+from src.services.internal.query_text import canonical_token_list
 
 DEFAULT_BENCHMARK_QUERIES = [
     "stainless steel pipe",

@@ -1,15 +1,15 @@
+"""Category hierarchy card generation for browsing.
+
+Generates category hierarchy cards with boosted matching and token coverage
+metrics for product browsing interfaces.
+"""
+
 from __future__ import annotations
 
-try:
-    from ...core.clients import es
-    from ...core.config import INDEX_NAME
-    from .common import as_text, sample_hierarchy_cards
-    from ..synonyms import expand_synonyms, synonym_source_tokens, token_coverage, tokenize_for_match
-except ImportError:
-    from core.clients import es
-    from core.config import INDEX_NAME
-    from services.internal.common import as_text, sample_hierarchy_cards
-    from services.synonyms import expand_synonyms, synonym_source_tokens, token_coverage, tokenize_for_match
+from src.core.clients import es
+from src.core.config import INDEX_NAME
+from src.services.internal.common import as_text, sample_hierarchy_cards
+from src.services.synonyms import expand_synonyms, synonym_source_tokens, token_coverage, tokenize_for_match
 
 
 def fetch_hierarchy_cards(keyword: str, max_cards: int = 3) -> tuple[list[dict], int]:

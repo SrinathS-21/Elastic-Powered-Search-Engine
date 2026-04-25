@@ -1,3 +1,9 @@
+"""Isotonic calibration for confidence score normalization.
+
+Implements isotonic calibration model fitting and application for normalizing
+confidence scores to improve ranking reliability.
+"""
+
 from __future__ import annotations
 
 from typing import Any

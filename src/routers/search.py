@@ -1,20 +1,26 @@
+"""Search API routes for product discovery.
+
+Provides autocomplete and product search endpoints with query event tracking
+and search backend selection.
+"""
+
 from __future__ import annotations
 
 from typing import Optional
 
 from fastapi import APIRouter, Query
 
-try:
-    from ..services.search import autocomplete_search, search_products
-except ImportError:
-    from services.search import autocomplete_search, search_products
+from src.services.internal.query_insights import track_query_event
+from src.services.search import autocomplete_search, search_products
 
 router = APIRouter()
 
 
 @router.get("/autocomplete")
 def autocomplete(q: str = Query(default="", min_length=0)):
-    return autocomplete_search(q)
+    payload = autocomplete_search(q)
+    track_query_event(q, endpoint="/autocomplete", query_kind="autocomplete")
+    return payload
 
 
 @router.get("/search")
@@ -26,7 +32,7 @@ def search(
     prod_category: Optional[str] = Query(default=None),
     mode: str = Query(default="hybrid", pattern="^(keyword|semantic|hybrid)$"),
 ):
-    return search_products(
+    payload = search_products(
         query=q,
         page=page,
         category=category,
@@ -34,3 +40,5 @@ def search(
         prod_category=prod_category,
         mode=mode,
     )
+    track_query_event(q, endpoint="/search", query_kind="search", mode=mode)
+    return payload

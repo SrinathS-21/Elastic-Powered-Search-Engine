@@ -1,3 +1,9 @@
+"""Synonym mapping loader and cache from JSON configuration.
+
+Loads synonym mappings from JSON files with caching, normalization,
+and parsing of synonym expansion rules.
+"""
+
 from __future__ import annotations
 
 import json

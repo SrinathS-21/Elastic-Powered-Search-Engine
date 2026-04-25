@@ -1,3 +1,9 @@
+"""Query text processing and analysis.
+
+Handles tokenization, stemming, phrase candidate generation, noise filtering,
+and text normalization for query understanding.
+"""
+
 from __future__ import annotations
 
 from functools import lru_cache
@@ -9,14 +15,9 @@ except Exception:
     SnowballStemmer = None
     WordNetLemmatizer = None
 
-try:
-    from ...core.config import PHRASE_CANDIDATE_LIMIT
-    from ...core.synonym_data import load_protected_tokens
-    from .common import as_text
-except ImportError:
-    from core.config import PHRASE_CANDIDATE_LIMIT
-    from core.synonym_data import load_protected_tokens
-    from services.internal.common import as_text
+from src.core.config import PHRASE_CANDIDATE_LIMIT
+from src.core.synonym_data import load_protected_tokens
+from src.services.internal.common import as_text
 
 # Common connective words that often create low-signal keyword permutations.
 QUERY_NOISE_TOKENS = {
@@ -97,6 +98,48 @@ def build_phrase_candidates(tokens: list[str], max_candidates: int = PHRASE_CAND
     return candidates
 
 
+def select_anchor_tokens(tokens: list[str], max_anchors: int = 3) -> list[str]:
+    if not tokens:
+        return []
+
+    scored: list[tuple[float, int, str]] = []
+    for idx, token in enumerate(tokens):
+        value = as_text(token).lower().strip()
+        if not value:
+            continue
+
+        score = float(len(value))
+        if value in QUERY_NOISE_TOKENS:
+            score -= 3.0
+        if value.isdigit():
+            score -= 2.0
+
+        scored.append((score, idx, value))
+
+    if not scored:
+        return tokens[-2:] if len(tokens) >= 2 else tokens[:]
+
+    ranked = sorted(scored, key=lambda item: (-item[0], item[1]))
+    selected: list[tuple[int, str]] = []
+    seen: set[str] = set()
+    for score, idx, value in ranked:
+        if value in seen:
+            continue
+        if score <= 1.0:
+            continue
+        selected.append((idx, value))
+        seen.add(value)
+        if len(selected) >= max_anchors:
+            break
+
+    if not selected:
+        fallback = tokens[-2:] if len(tokens) >= 2 else tokens[:]
+        return [as_text(token).lower().strip() for token in fallback if as_text(token).strip()]
+
+    selected.sort(key=lambda item: item[0])
+    return [token for _idx, token in selected]
+
+
 def build_query_context(text: str) -> dict[str, Any]:
     raw_tokens = token_list(text)
     normalized_query = " ".join(raw_tokens)
@@ -106,7 +149,7 @@ def build_query_context(text: str) -> dict[str, Any]:
 
     intent_query = " ".join(intent_tokens)
     phrase_candidates = build_phrase_candidates(intent_tokens)
-    anchor_tokens = intent_tokens[-2:] if len(intent_tokens) >= 2 else intent_tokens[:]
+    anchor_tokens = select_anchor_tokens(intent_tokens or raw_tokens)
     canonical_raw_tokens = canonical_tokens(raw_tokens)
     canonical_intent_tokens = canonical_tokens(intent_tokens)
     return {

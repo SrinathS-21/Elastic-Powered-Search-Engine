@@ -1,15 +1,17 @@
+"""Search quality benchmarking service.
+
+Measures search performance across multiple dimensions: latency, relevance scores,
+token coverage, and query-category mapping accuracy.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
 
-try:
-    from .search import search_products
-    from .synonyms import COMPACT_BENCHMARK_QUERIES, DEFAULT_BENCHMARK_QUERIES, percentile, token_coverage
-except ImportError:
-    from services.search import search_products
-    from services.synonyms import COMPACT_BENCHMARK_QUERIES, DEFAULT_BENCHMARK_QUERIES, percentile, token_coverage
+from src.services.search import search_products
+from src.services.synonyms import COMPACT_BENCHMARK_QUERIES, DEFAULT_BENCHMARK_QUERIES, percentile, token_coverage
 
 
 def run_quality_benchmark(
