@@ -83,8 +83,8 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train isotonic confidence calibration for mapping")
-    parser.add_argument("--labels", default="config/mapping_calibration_labels.jsonl")
-    parser.add_argument("--output", default="config/mapping_confidence_calibration.json")
+    parser.add_argument("--labels", default="resources/mapping_calibration_labels.jsonl")
+    parser.add_argument("--output", default="resources/mapping_confidence_calibration.json")
     parser.add_argument("--max-samples", type=int, default=0, help="0 means all")
     parser.add_argument("--metrics-bins", type=int, default=10)
     parser.add_argument("--output-mode", choices=["summary", "full"], default="summary")

@@ -24,7 +24,7 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Logs
+# Runtime logs/artifacts
 *.log
-logs/mapping_telemetry*.jsonl
+runtime/mapping_telemetry*.jsonl
 

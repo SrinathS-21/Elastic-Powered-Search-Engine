@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
-from src.services.benchmark import benchmark_query_set, run_quality_benchmark
+from src.services.internal.benchmark import benchmark_query_set, run_quality_benchmark
 
 router = APIRouter()
 

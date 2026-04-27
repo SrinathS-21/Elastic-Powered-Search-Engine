@@ -22,7 +22,7 @@ from src.core.clients import (
     reset_request_search_backend,
     set_request_search_backend,
 )
-from src.core.config import UI_DIR
+from src.core.config import CORS_ALLOW_ORIGINS, UI_DIR
 from src.core.lifecycle import lifespan
 from src.routers import ui as ui_router
 
@@ -38,7 +38,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ALLOW_ORIGINS,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
@@ -53,7 +53,7 @@ async def search_backend_override_middleware(request: Request, call_next):
     # Skip backend probing entirely for static/doc/root HTML requests — they don't need it
     # and the network ping adds 300ms–5s for zero benefit.
     is_non_api = (
-        path in ("/", "/pbr-quick-post-enrich.html", "/pbr-complete-journey-v4.html")
+        path in ("/", "/pbr-quick-post-enrich.html")
         or any(path.startswith(p) for p in _NON_API_PATH_PREFIXES)
     )
 

@@ -121,9 +121,9 @@ def _calibration_summary(model: dict[str, Any] | None) -> dict[str, Any]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Continuous quality loop status report")
-    parser.add_argument("--telemetry", default="logs/mapping_telemetry_phase3_complete.jsonl")
+    parser.add_argument("--telemetry", default="runtime/mapping_telemetry_phase3_complete.jsonl")
     parser.add_argument("--regression", default="")
-    parser.add_argument("--calibration-model", default="config/mapping_confidence_calibration.json")
+    parser.add_argument("--calibration-model", default="resources/mapping_confidence_calibration.json")
     parser.add_argument("--output", choices=["summary", "full"], default="summary")
     return parser.parse_args()
 

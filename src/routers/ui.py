@@ -14,11 +14,10 @@ from fastapi import APIRouter, Query
 from fastapi.responses import FileResponse
 
 from src.core.clients import active_search_backend, backend_availability, first_available_backend
-from src.core.config import APP_HOST, APP_PORT, APP_SCHEME, INDEX_NAME, KEYWORD_INDEX, UI_API_BASE_URL, UI_DIR
-from src.services.internal.common import sample_hierarchy_cards
+from src.core.config import APP_HOST, APP_PORT, APP_SCHEME, UI_API_BASE_URL, UI_DIR
+from src.services.mapping import map_query_to_categories, sample_hierarchy_cards
 from src.services.internal.query_insights import track_query_event
-from src.services.internal.suggestions import fetch_keyword_suggestions
-from src.services.mapping import map_query_to_categories
+from src.services.suggestions import fetch_keyword_suggestions
 
 router = APIRouter()
 
@@ -43,17 +42,6 @@ def ui_quick_post_enrich():
     return {
         "error": "pbr-quick-post-enrich.html not found",
         "available_at": "/ui/pbr-quick-post-enrich.html",
-    }
-
-
-@router.get("/pbr-complete-journey-v4.html", include_in_schema=False)
-def ui_complete_journey():
-    pbr_file = UI_DIR / "pbr-complete-journey-v4.html"
-    if pbr_file.exists():
-        return FileResponse(pbr_file, media_type="text/html")
-    return {
-        "error": "pbr-complete-journey-v4.html not found",
-        "available_at": "/ui/pbr-complete-journey-v4.html",
     }
 
 

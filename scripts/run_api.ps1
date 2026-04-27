@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 
-$defaultSynonymsFile = Join-Path $repoRoot "config/synonyms.json"
+$defaultSynonymsFile = Join-Path $repoRoot "resources/synonyms.json"
 if (-not $env:B2B_SYNONYMS_FILE -and (Test-Path $defaultSynonymsFile)) {
     $env:B2B_SYNONYMS_FILE = $defaultSynonymsFile
 }

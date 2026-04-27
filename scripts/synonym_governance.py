@@ -216,9 +216,9 @@ def _latest_snapshot(history_dir: Path) -> Path | None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Synonym governance workflow (validate/review/apply/rollback)")
     parser.add_argument("command", choices=["validate", "snapshot", "review-proposal", "apply-proposal", "rollback"])
-    parser.add_argument("--synonyms", default="config/synonyms.json")
+    parser.add_argument("--synonyms", default="resources/synonyms.json")
     parser.add_argument("--proposal", default="")
-    parser.add_argument("--history-dir", default="config/synonyms_history")
+    parser.add_argument("--history-dir", default="resources/synonyms_history")
     parser.add_argument("--snapshot", default="")
     parser.add_argument("--output", choices=["summary", "full"], default="summary")
     parser.add_argument("--write-report", default="")

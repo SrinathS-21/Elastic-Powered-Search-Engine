@@ -50,7 +50,7 @@ from src.core.config import (
 from src.core.embedding_client import encode_query_text
 from src.core.logger import log
 from src.services.internal.calibration import apply_isotonic_calibration, is_calibration_model_valid
-from src.services.internal.common import as_text, clamp, index_exists, trim_terms
+from src.services.internal.common import as_text, clamp, index_exists, sample_hierarchy_cards, trim_terms
 from src.services.internal.query_text import (
     build_query_context,
     canonical_token_list,

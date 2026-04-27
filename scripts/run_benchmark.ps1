@@ -56,7 +56,7 @@ function Load-DotEnv {
 $envFile = Join-Path $repoRoot ".env"
 Load-DotEnv -Path $envFile
 
-$defaultSynonymsFile = Join-Path $repoRoot "config/synonyms.json"
+$defaultSynonymsFile = Join-Path $repoRoot "resources/synonyms.json"
 if (-not $env:B2B_SYNONYMS_FILE -and (Test-Path $defaultSynonymsFile)) {
     $env:B2B_SYNONYMS_FILE = $defaultSynonymsFile
 }

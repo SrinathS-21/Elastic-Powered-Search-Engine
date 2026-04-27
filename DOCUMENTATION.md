@@ -1,13 +1,149 @@
-﻿# Pepagora Search Functionality Approach (Updated Submission Document)
+# Pepagora Search Functionality Approach (Updated Submission Document)
 
-Version date: 2026-04-14
+Version date: 2026-04-27
 
 ## Document Status
 
 - Status: Updated and current.
-- Updated on: 2026-04-14.
+- Updated on: 2026-04-27.
 - Primary decision document: `DOCUMENTATION.md`.
-- Implementation tracker (operational details): `IMPLEMENTATION_TRACKER.md`.
+- Engineering runbook and operational commands: `scripts/README.md`.
+
+## Documentation Purpose (Production Standard)
+
+This document is the production decision and operations reference for this repository.
+
+It exists to ensure:
+
+- Safe deployment and rollback decisions are based on explicit checks.
+- Runtime scope is clear (what is live vs. present-but-unmounted code).
+- Engineers have one place for architecture intent, safety constraints, and release criteria.
+- Codebase cleanup decisions are recorded with rationale, owner, and status.
+
+### Documentation Quality Bar
+
+For production use, documentation must remain:
+
+- Accurate: every listed route/path/command must exist and work.
+- Actionable: release checks and rollback steps must be executable as written.
+- Minimal: avoid duplicate docs that can drift.
+- Decision-driven: unresolved choices must be listed with owner decision required.
+
+## Release Readiness Checklist (Go/No-Go)
+
+Mark release as `go` only when all checks below pass:
+
+1. Runtime and dependency checks
+  - `python -m compileall src scripts` succeeds.
+  - `python -m pip check` reports no broken requirements.
+2. API runtime boundary checks
+  - Only intended routers are mounted in `src/main.py`.
+  - Docs/OpenAPI endpoints remain disabled unless explicitly required.
+3. Environment hardening checks
+  - `CORS_ALLOW_ORIGINS` is explicitly set for production (no wildcard).
+  - Required backend/env keys resolve at startup.
+4. Operations checks
+  - Reliability/canary scripts are available and run from `scripts/README.md`.
+  - One-time migration scripts are not accidentally included in recurring jobs.
+5. Release hygiene checks
+  - Non-runtime notebook experiments are excluded from deploy artifacts.
+  - No duplicate generated docs are treated as source-of-truth.
+
+## Engineering Production Readiness Snapshot (2026-04-27)
+
+This snapshot is for developer handover, runtime safety, and production operations.
+
+### Runtime Scope (Current)
+
+- Active production API surface is intentionally limited to UI + `/ui-api/*` through `src/main.py` and `src/routers/ui.py`.
+- Non-production/public-disabled surfaces remain in code (`src/routers/search.py`, `src/routers/quality.py`) but are not mounted by default.
+- FastAPI docs, redoc, and OpenAPI schema are disabled in runtime config.
+
+### Code Quality and Dependency Verification (Completed)
+
+- Workspace diagnostics (`src/` + `scripts/`): no static editor errors.
+- Python syntax compile check (`compileall src scripts`): passed.
+- Environment dependency consistency (`pip check`): passed.
+- Import-to-requirements audit (`src/` + `scripts/`) confirms runtime dependencies are covered by `src/requirements.txt`.
+
+### Cleanup Already Completed
+
+- Removed dead UI route for non-existent file `/pbr-complete-journey-v4.html`.
+- Removed empty unused router module `src/routers/admin.py`.
+- Removed stale path branch in middleware for `/pbr-complete-journey-v4.html`.
+- Removed duplicate generated mirror file `DOCUMENTATION.html` to keep markdown as single source-of-truth.
+
+### Pending Cleanup Decisions (Owner Required)
+
+- Unmounted routers (`src/routers/search.py`, `src/routers/quality.py`):
+  - Keep in-place if internal API exposure is planned in near term.
+  - Otherwise move to an `internal/` or `archive/` area to reduce runtime confusion.
+- Notebook source control policy:
+  - Keep notebooks versioned only if they are operationally required.
+  - Otherwise store exported scripts/artifacts and keep notebooks out of release branches.
+- Migration script lifecycle policy:
+  - Keep one-time scripts (for example `scripts/ingest_live_fields.py`) but tag and group them as migration-only.
+  - Remove when no longer needed and after operational handover.
+
+## Decision Register for Codebase Clarity
+
+The following decisions should be explicitly recorded by the team lead/repo owner.
+
+| Decision Area | Options | Recommendation | Why It Matters |
+|---|---|---|---|
+| Unmounted routers | Keep under `src/routers/` or move/archive | Move to `internal/` or archive unless planned for near-term activation | Prevents confusion about what is actually live |
+| Notebook governance | Keep in repo vs move to research branch/artifact storage | Keep only operational notebooks in main branch | Reduces noisy diffs and accidental release coupling |
+| Migration scripts | Keep indefinitely vs time-boxed retention | Keep with explicit `migration-only` status and retirement date | Keeps scripts useful without growing permanent clutter |
+| CORS production policy | Wildcard vs explicit allowlist | Explicit allowlist only in production | Reduces cross-origin exposure risk |
+| Runtime surface growth | Add endpoints directly vs staged rollout | Stage with canary/reliability checks before mounting | Protects latency and behavior stability |
+
+### Production Hardening Added
+
+- CORS origins are now env-configurable via `CORS_ALLOW_ORIGINS` (comma-separated), defaulting to `*` for backward compatibility.
+- Recommended production setting example:
+
+```text
+CORS_ALLOW_ORIGINS=https://app.pepagora.com,https://admin.pepagora.com
+```
+
+## Developer Codebase Map
+
+| Path | Purpose | Production Criticality |
+|---|---|---|
+| `src/main.py` | FastAPI app bootstrap + middleware + mounted routers | Critical |
+| `src/core/` | Config, backend clients, lifecycle, embedding client | Critical |
+| `src/services/` | Search/mapping business logic | Critical |
+| `src/routers/ui.py` | Public UI API endpoints | Critical |
+| `src/routers/search.py` | Internal/search API surface (currently unmounted) | Optional |
+| `src/routers/quality.py` | Benchmark API surface (currently unmounted) | Optional |
+| `scripts/` | Operational/regression/governance tooling | Operational |
+| `ui/` | Static web assets served by API | Critical |
+| `resources/` | Synonyms and calibration artifacts | Critical |
+| `runtime/` | Generated telemetry and reliability outputs | Operational |
+| `Notebooks/` | Migration/experimentation workflows | Non-runtime |
+
+## Dependency Policy (Runtime vs Optional)
+
+### Runtime Dependencies (`src/requirements.txt`)
+
+- `fastapi`
+- `uvicorn[standard]`
+- `elasticsearch`
+- `opensearch-py`
+- `pymongo`
+- `nltk`
+
+### Optional/Notebook Dependencies
+
+- `sentence-transformers`, `torch`, and notebook-only helpers are required only for notebook-based local embedding flows and migration notebooks.
+- Keep these out of runtime deploy images unless that deployment explicitly runs notebooks.
+
+## Verification Commands (Recommended Before Release)
+
+```powershell
+& ".\.venv\Scripts\python.exe" -m compileall src scripts
+& ".\.venv\Scripts\python.exe" -m pip check
+```
 
 ## What Was Updated in This Revision
 
@@ -16,7 +152,7 @@ Version date: 2026-04-14
 
 2. Kept the document business-focused:
 - Removed tracker-level operational details from this file.
-- Preserved implementation tracker in separate file.
+- Moved runnable operational details and commands to `scripts/README.md`.
 
 3. Updated challenge statements to reflect real issues faced:
 - Kept only practical relevance/quality issues from implementation and rollout.
@@ -582,7 +718,6 @@ Effect:
 
 Endpoints:
 
-- `GET /ui-api/hierarchy`
 - `GET /ui-api/map-category`
 
 ### 5.1 Notation
@@ -668,14 +803,14 @@ Current runtime defaults:
 
 | Parameter | Default |
 |---|---|
-| `AUTO_MAP_CONFIDENCE` | `0.72` |
-| `AUTO_MAP_MARGIN` | `0.14` |
-| `CONFIRM_MAP_CONFIDENCE` | `0.52` |
-| `PRODUCT_FALLBACK_TRIGGER` | `0.42` |
+| `AUTO_MAP_CONFIDENCE` | `0.64` |
+| `AUTO_MAP_MARGIN` | `0.10` |
+| `CONFIRM_MAP_CONFIDENCE` | `0.40` |
+| `PRODUCT_FALLBACK_TRIGGER` | `0.32` |
 | `SEMANTIC_CLUSTER_WEIGHT` | `0.62` |
-| `PRODUCT_VOTE_WEIGHT` | `0.55` |
-| `PRODUCT_MAIN_VOTE_SHARE` | `0.75` |
-| `PRODUCT_SHORT_VOTE_SHARE` | `0.25` |
+| `PRODUCT_VOTE_WEIGHT` | `0.45` |
+| `PRODUCT_MAIN_VOTE_SHARE` | `0.60` |
+| `PRODUCT_SHORT_VOTE_SHARE` | `0.40` |
 | `SHORT_VECTOR_RERANK_BOOST` | `0.18` |
 | `KEYWORD_P95_PRODUCT_COUNT` | `17` |
 | `RELIABILITY_BETA` | `0.35` |
@@ -718,7 +853,7 @@ Important safety behavior:
 
 The product-vector order is deterministic.
 
-#### A. Mapping flow (`/ui-api/hierarchy`, `/ui-api/map-category`)
+#### A. Mapping flow (`/ui-api/map-category`)
 
 Product vectors are only used after lexical and optional semantic-cluster lanes fail to reach required confidence:
 
@@ -766,12 +901,7 @@ So, in search mode, main is primary retrieval and short is secondary rerank.
 - `GET /ui-api/suggestions?q=...&limit=...`
 - Returns suggestions, count, ranking order, and latency.
 
-### 8.2 Hierarchy Mapping API
-
-- `GET /ui-api/hierarchy?keyword=...&max_cards=...`
-- Returns decision, confidence, margin, lanes used, cards, and matched-doc count.
-
-### 8.3 Intent Mapping API
+### 8.2 Category Mapping API
 
 - `GET /ui-api/map-category?q=...&selected=...&max_cards=...`
 - Returns:
@@ -779,7 +909,6 @@ So, in search mode, main is primary retrieval and short is secondary rerank.
   - confidence and margin
   - top category and alternatives
   - semantic/product fallback usage indicators
-  - active thresholds
 
 Evidence fields returned to support auditability:
 
@@ -790,7 +919,7 @@ Evidence fields returned to support auditability:
 - `avg_category_ambiguity`
 - `lanes_used`
 
-### 8.4 UI Rendering Contract for Mapping Cards
+### 8.3 UI Rendering Contract for Mapping Cards
 
 UI behavior is now confidence-aware and non-congested.
 
@@ -1024,12 +1153,8 @@ Expected response shape:
   "lanes_used": ["lexical", "semantic", "product_vote"],
   "semantic_used": true,
   "product_fallback_used": true,
-  "thresholds": {
-    "auto_map": 0.72,
-    "auto_map_margin": 0.14,
-    "confirm": 0.52,
-    "product_fallback": 0.42
-  },
+  "phase3_active": true,
+  "alerts": [],
   "latency_ms": 186.3
 }
 ```
@@ -1147,15 +1272,14 @@ Implementation source: src/main.py
 # Start API
 ./scripts/run_api.ps1
 
-# Product indexing
-./elasticsearch_indexing_service/start_product.ps1 create-index --recreate
-./elasticsearch_indexing_service/start_product.ps1 backfill --batch-size 192 --published-only
-
-# Keyword indexing
-./elasticsearch_indexing_service/start_keyword.ps1 create-index --recreate
-./elasticsearch_indexing_service/start_keyword.ps1 backfill --batch-size 400
-
 # Benchmark
 ./scripts/run_benchmark.ps1 -QuerySet compact -Modes "keyword,semantic,hybrid"
+
+# Reliability gate
+./scripts/run_reliability_gate.ps1
 ```
+
+> **Note:** Product and keyword indexing commands (`start_product.ps1`, `start_keyword.ps1`) live in the
+> separate `elasticsearch_indexing_service` and `opensearch_indexing_service` repositories.
+> See `scripts/README.md` for full pipeline command reference once those repos are available locally.
 

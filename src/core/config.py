@@ -95,6 +95,8 @@ PAGE_SIZE = 20
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 UI_DIR = BASE_DIR / "ui"
+RESOURCES_DIR = BASE_DIR / "resources"
+RUNTIME_DIR = BASE_DIR / "runtime"
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -114,10 +116,19 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_csv(name: str, default: list[str]) -> list[str]:
+    value = os.getenv(name)
+    if value is None:
+        return default[:]
+    items = [item.strip() for item in value.split(",") if item.strip()]
+    return items if items else default[:]
+
+
 APP_SCHEME = _required_env("APP_SCHEME")
 APP_HOST = _required_env("APP_HOST")
 APP_PORT = _required_port("APP_PORT")
 UI_API_BASE_URL = (os.getenv("UI_API_BASE_URL") or "").strip().rstrip("/")
+CORS_ALLOW_ORIGINS = _env_csv("CORS_ALLOW_ORIGINS", ["*"])
 
 
 # Suggestion safety controls tuned for sparse keyword clusters.
@@ -151,10 +162,10 @@ MAPPING_ENABLE_LEARNED_CONFIDENCE_CALIBRATION = _env_bool("MAPPING_ENABLE_LEARNE
 MAPPING_ENABLE_SEMANTIC_FALLBACK = _env_bool("MAPPING_ENABLE_SEMANTIC_FALLBACK", True)
 MAPPING_ENABLE_PRODUCT_FALLBACK = _env_bool("MAPPING_ENABLE_PRODUCT_FALLBACK", True)
 MAPPING_TELEMETRY_ENABLED = _env_bool("MAPPING_TELEMETRY_ENABLED", True)
-MAPPING_TELEMETRY_FILE = os.getenv("MAPPING_TELEMETRY_FILE", str(BASE_DIR / "logs" / "mapping_telemetry.jsonl"))
+MAPPING_TELEMETRY_FILE = os.getenv("MAPPING_TELEMETRY_FILE", str(RUNTIME_DIR / "mapping_telemetry.jsonl"))
 MAPPING_CONFIDENCE_MODEL_FILE = os.getenv(
     "MAPPING_CONFIDENCE_MODEL_FILE",
-    str(BASE_DIR / "config" / "mapping_confidence_calibration.json"),
+    str(RESOURCES_DIR / "mapping_confidence_calibration.json"),
 )
 
 # Alert thresholds for monitoring and triage.

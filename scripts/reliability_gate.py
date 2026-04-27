@@ -99,7 +99,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--random-samples", type=int, default=40)
     parser.add_argument("--baseline-canary-percent", type=int, default=100)
     parser.add_argument("--canary-percent", type=int, default=30)
-    parser.add_argument("--logs-dir", default="logs")
+    parser.add_argument("--logs-dir", default="runtime")
     parser.add_argument("--output", choices=["summary", "full"], default="summary")
     parser.add_argument("--write-report", default="")
     parser.add_argument("--python", default=sys.executable)
@@ -146,7 +146,7 @@ def main() -> None:
                     str(scripts_dir / "synonym_governance.py"),
                     "validate",
                     "--synonyms",
-                    "config/synonyms.json",
+                    "resources/synonyms.json",
                     "--output",
                     "full",
                 ],
@@ -273,7 +273,7 @@ def main() -> None:
                 "--regression",
                 str(baseline_reg),
                 "--calibration-model",
-                "config/mapping_confidence_calibration.json",
+                "resources/mapping_confidence_calibration.json",
                 "--output",
                 "full",
             ],
